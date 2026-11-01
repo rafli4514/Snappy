@@ -231,18 +231,29 @@
   let builderEditingTemplate: CustomTemplate | null = null;
   let showLibraryModal = false;
 
-  // Photo zoom modal
+  // Photo zoom modal — dialog native modal (showModal) agar terpusat,
+  // punya backdrop, dan Escape bekerja (R-32)
   let previewPhotoUrl: string | null = null;
   let previewPhotoIndex: number | null = null;
+  let zoomDialogEl: HTMLDialogElement | null = null;
+  let zoomOpener: HTMLElement | null = null;
 
   function openPhotoPreview(url: string, index: number): void {
     previewPhotoUrl = url;
     previewPhotoIndex = index;
+    zoomOpener = document.activeElement as HTMLElement | null;
+    zoomDialogEl?.showModal();
   }
 
-  function closePhotoPreview(): void {
+  function handleZoomClosed(): void {
     previewPhotoUrl = null;
     previewPhotoIndex = null;
+    zoomOpener?.focus();
+    zoomOpener = null;
+  }
+
+  function handleZoomBackdrop(e: MouseEvent): void {
+    if (e.target === zoomDialogEl) zoomDialogEl?.close();
   }
 
   function handleNext(): void {
@@ -507,24 +518,31 @@
   </div>
 </section>
 
-<!-- Photo Zoom Modal Dialog -->
-{#if previewPhotoUrl}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-  <dialog class="zoom-dialog" open on:click={closePhotoPreview}>
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <div class="zoom-box" on:click|stopPropagation role="document">
-      <div class="zoom-box-head font-mono">
-        <span>FOTO #{(previewPhotoIndex ?? 0) + 1}</span>
-        <button type="button" class="zoom-close-btn" on:click={closePhotoPreview} aria-label="Tutup pratinjau">
+<!-- Photo Zoom Modal — native dialog (showModal): terpusat + backdrop + Escape -->
+<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
+<dialog
+  bind:this={zoomDialogEl}
+  class="zoom-dialog"
+  aria-label="Perbesar foto"
+  on:close={handleZoomClosed}
+  on:click={handleZoomBackdrop}
+>
+  <div class="zoom-box">
+    <div class="zoom-box-head font-mono">
+      <span>FOTO #{(previewPhotoIndex ?? 0) + 1}</span>
+      <form method="dialog">
+        <button type="submit" class="zoom-close-btn" aria-label="Tutup pratinjau">
           ✕
         </button>
-      </div>
-      <div class="zoom-box-img">
-        <img src={previewPhotoUrl} alt="Foto #{(previewPhotoIndex ?? 0) + 1}" class="zoom-img" />
-      </div>
+      </form>
     </div>
-  </dialog>
-{/if}
+    <div class="zoom-box-img">
+      {#if previewPhotoUrl}
+        <img src={previewPhotoUrl} alt="Foto #{(previewPhotoIndex ?? 0) + 1}" class="zoom-img" />
+      {/if}
+    </div>
+  </div>
+</dialog>
 
 <!-- Custom Template Builder Modal -->
 {#if showBuilderModal}
