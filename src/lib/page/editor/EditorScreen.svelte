@@ -163,14 +163,16 @@
   }
 
   // ── Render pratinjau strip ──
-  $: if (canvas && photos.length) {
-    renderPreview();
-  }
+  // Satu jalur reaktif + pengaman anti-race: render yang tertinggal (usang)
+  // dibuang setelah load gambar agar tak pernah menimpa render terbaru.
+  let renderSeq = 0;
 
-  $: activeTemplate, caption, showDate, showSlotNumbers, canvas && renderPreview();
+  $: caption, showDate, showSlotNumbers, canvas && photos.length && activeTemplate && renderPreview();
 
   async function renderPreview(): Promise<void> {
     if (!canvas) return;
+    const seq = ++renderSeq;
+    const isStale = (): boolean => seq !== renderSeq;
     const p = PRODUK[$session.photoCount] || PRODUK[4];
     canvas.width = Math.round(p.pxW / 2);
     canvas.height = Math.round(p.pxH / 2);
@@ -180,7 +182,7 @@
     } else {
       canvas.style.height = '';
     }
-    await renderStripPreview(canvas, photos, activeTemplate, { caption, showDate, showSlotNumbers });
+    await renderStripPreview(canvas, photos, activeTemplate, { caption, showDate, showSlotNumbers }, isStale);
   }
 
   onMount(async () => {
@@ -935,18 +937,15 @@
     aspect-ratio: 1 / 3;
     border-radius: 8px;
     box-shadow:
-      0 24px 60px rgba(11, 10, 9, 0.45),
-      0 4px 16px rgba(11, 10, 9, 0.25),
+      0 10px 26px rgba(11, 10, 9, 0.3),
       0 0 0 1px var(--ring-line);
     display: block;
     object-fit: contain;
-    transition: box-shadow 220ms ease;
   }
 
   .theme-light .strip-canvas {
     box-shadow:
-      0 24px 60px rgba(28, 25, 23, 0.16),
-      0 4px 16px rgba(28, 25, 23, 0.08),
+      0 10px 26px rgba(28, 25, 23, 0.14),
       0 0 0 1px var(--ring-line);
   }
 

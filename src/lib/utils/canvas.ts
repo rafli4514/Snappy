@@ -442,7 +442,8 @@ async function renderCustomStrip(
 	stripX: number,
 	stripY: number,
 	stripW: number,
-	stripH: number
+	stripH: number,
+	isStale?: () => boolean
 ): Promise<void> {
 	// 1. Fill base background
 	ctx.fillStyle = template.backgroundColor || '#FFFFFF';
@@ -453,6 +454,7 @@ async function renderCustomStrip(
 	if (template.artworkDataUrl) {
 		try {
 			artworkImg = await loadImage(template.artworkDataUrl);
+			if (isStale?.()) return;
 		} catch (e: unknown) {
 			console.warn('Could not load custom template artwork:', e);
 		}
@@ -564,6 +566,7 @@ async function renderCustomStrip(
 		.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
 	for (const ovl of overlays) {
+		if (isStale?.()) return;
 		try {
 			const ovlImg = await loadImage(ovl.src);
 			const ox = stripX + ovl.x * stripW;
@@ -684,11 +687,13 @@ export async function renderSingleStrip(
 	stripX: number,
 	stripY: number,
 	stripW: number,
-	stripH: number
+	stripH: number,
+	isStale?: () => boolean
 ): Promise<void> {
 	const count = images.length || 4;
+	if (isStale?.()) return;
 	if (isCustomTemplate(template)) {
-		await renderCustomStrip(ctx, images, template, options, stripX, stripY, stripW, stripH);
+		await renderCustomStrip(ctx, images, template, options, stripX, stripY, stripW, stripH, isStale);
 	} else {
 		renderBuiltinStrip(ctx, images, template, options, stripX, stripY, stripW, stripH, count);
 	}
@@ -701,9 +706,11 @@ export async function renderStripPreview(
 	canvas: HTMLCanvasElement,
 	photoDataUrls: (string | null)[],
 	templateOrKey: string | CustomTemplate | BuiltinTemplate,
-	options: RenderOptions = {}
+	options: RenderOptions = {},
+	isStale?: () => boolean
 ): Promise<void> {
 	const template = await resolveTemplate(templateOrKey);
+	if (isStale?.()) return;
 	const ctx = canvas.getContext('2d');
 	if (!ctx) return;
 	ctx.imageSmoothingEnabled = true;
@@ -716,10 +723,11 @@ export async function renderStripPreview(
 			url ? loadImage(url).catch(() => null) : Promise.resolve(null)
 		)
 	);
+	if (isStale?.()) return;
 
 	await renderSingleStrip(
 		ctx, images, template, options,
-		0, 0, canvas.width, canvas.height
+		0, 0, canvas.width, canvas.height, isStale
 	);
 }
 
