@@ -3,9 +3,12 @@
   import { session, setCustomTemplate } from '#lib/stores/session';
   import { saveCustomTemplate, exportTemplateFile, BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
   import { renderSingleStrip, loadImage } from '#lib/utils/canvas';
+  import { generateSlots } from '#lib/data/stripTemplates';
   import type { CustomSlot, CustomTemplate, DecorativeLayer, SlotPoint, BuiltinSticker } from '#lib/types';
 
   export let initialTemplate: CustomTemplate | null = null;
+  /** Jumlah slot awal saat membuat template baru (tanpa initialTemplate) — 1..6. */
+  export let initialSlotCount: number | null = null;
   export let onClose: () => void = () => {};
   export let onSaveAndApply: (template: CustomTemplate) => void = () => {};
 
@@ -28,50 +31,7 @@
 
   let slots: CustomSlot[] = initialTemplate && initialTemplate.slots
     ? JSON.parse(JSON.stringify(initialTemplate.slots)) as CustomSlot[]
-    : [
-        {
-          id: 'slot-1',
-          name: 'Slot 1',
-          type: 'rect',
-          x: 0.08,
-          y: 0.10,
-          width: 0.84,
-          height: 0.24,
-          borderRadius: 6,
-          assignedPhotoIndex: 0,
-          scale: 1.0,
-          offsetX: 0,
-          offsetY: 0
-        },
-        {
-          id: 'slot-2',
-          name: 'Slot 2',
-          type: 'rect',
-          x: 0.08,
-          y: 0.38,
-          width: 0.84,
-          height: 0.24,
-          borderRadius: 6,
-          assignedPhotoIndex: 1,
-          scale: 1.0,
-          offsetX: 0,
-          offsetY: 0
-        },
-        {
-          id: 'slot-3',
-          name: 'Slot 3',
-          type: 'rect',
-          x: 0.08,
-          y: 0.66,
-          width: 0.84,
-          height: 0.24,
-          borderRadius: 6,
-          assignedPhotoIndex: 2,
-          scale: 1.0,
-          offsetX: 0,
-          offsetY: 0
-        }
-      ];
+    : generateSlots(initialSlotCount ?? 3);
 
   let overlays: DecorativeLayer[] = initialTemplate && initialTemplate.overlays
     ? JSON.parse(JSON.stringify(initialTemplate.overlays)) as DecorativeLayer[]

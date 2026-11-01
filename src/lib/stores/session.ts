@@ -139,6 +139,37 @@ export function addPhoto(dataUrl: string): void {
 	});
 }
 
+/** Swap position of two photos in the session */
+export function swapPhotos(index1: number, index2: number): void {
+	session.update((s) => {
+		const photos = [...s.photos];
+		if (index1 >= 0 && index1 < photos.length && index2 >= 0 && index2 < photos.length) {
+			const temp = photos[index1];
+			photos[index1] = photos[index2];
+			photos[index2] = temp;
+		}
+		return { ...s, photos };
+	});
+}
+
+/** Move a photo from one position to another (drag and drop reordering) */
+export function movePhoto(fromIndex: number, toIndex: number): void {
+	session.update((s) => {
+		const photos = [...s.photos];
+		if (
+			fromIndex >= 0 &&
+			fromIndex < photos.length &&
+			toIndex >= 0 &&
+			toIndex < photos.length &&
+			fromIndex !== toIndex
+		) {
+			const [moved] = photos.splice(fromIndex, 1);
+			photos.splice(toIndex, 0, moved);
+		}
+		return { ...s, photos };
+	});
+}
+
 /** Mark a specific photo slot for retake */
 export function setRetakeIndex(index: number | null): void {
 	session.update((s) => ({ ...s, retakeIndex: index }));

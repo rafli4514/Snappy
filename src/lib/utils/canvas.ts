@@ -275,7 +275,8 @@ function drawEmptyBoothSlot(
 	y: number,
 	w: number,
 	h: number,
-	t: BuiltinTemplate
+	t: BuiltinTemplate,
+	slotNumber?: number
 ): void {
 	ctx.fillStyle = t.checkerA;
 	ctx.fillRect(x, y, w, h);
@@ -298,6 +299,17 @@ function drawEmptyBoothSlot(
 	ctx.strokeStyle = t.slotLine;
 	ctx.lineWidth = 1;
 	ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+
+	if (slotNumber !== undefined) {
+		ctx.save();
+		const numSize = Math.max(24, Math.round(Math.min(w, h) * 0.28));
+		ctx.fillStyle = t.ink || '#334155';
+		ctx.font = `800 ${numSize}px 'Inter', sans-serif`;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillText(`${slotNumber}`, x + w / 2, y + h / 2);
+		ctx.restore();
+	}
 }
 
 /**
@@ -357,9 +369,26 @@ function renderBuiltinStrip(
 				ctx.rect(cursorX, cursorY, w, rowH);
 				ctx.clip();
 				drawCroppedImage(ctx, img, cursorX, cursorY, w, rowH);
+				if (options.showSlotNumbers) {
+					const badgeSize = Math.max(22, Math.round(stripW * 0.055));
+					const badgeX = cursorX + 8;
+					const badgeY = cursorY + 8;
+					ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+					roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, 6);
+					ctx.fill();
+					ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+					ctx.lineWidth = 1;
+					ctx.stroke();
+
+					ctx.fillStyle = '#FFFFFF';
+					ctx.font = `700 ${Math.round(badgeSize * 0.6)}px 'Inter', sans-serif`;
+					ctx.textAlign = 'center';
+					ctx.textBaseline = 'middle';
+					ctx.fillText(`${slotIndex + 1}`, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+				}
 				ctx.restore();
 			} else {
-				drawEmptyBoothSlot(ctx, cursorX, cursorY, w, rowH, t);
+				drawEmptyBoothSlot(ctx, cursorX, cursorY, w, rowH, t, slotIndex + 1);
 			}
 			slotIndex++;
 			cursorX += w + p.gap * k;
@@ -467,9 +496,12 @@ async function renderCustomStrip(
 			ctx.clip();
 		}
 
-		// Determine assigned photograph
-		const pIndex = slot.assignedPhotoIndex;
-		const img = (pIndex !== null && pIndex !== undefined && images[pIndex]) ? images[pIndex] : null;
+		// Determine assigned photograph (fallback to slot index if unassigned)
+		const pIndex =
+			slot.assignedPhotoIndex !== null && slot.assignedPhotoIndex !== undefined
+				? slot.assignedPhotoIndex
+				: idx;
+		const img = pIndex >= 0 && pIndex < images.length && images[pIndex] ? images[pIndex] : null;
 
 		if (img) {
 			drawCroppedImageWithTransform(
@@ -483,16 +515,39 @@ async function renderCustomStrip(
 				slot.offsetX ?? 0,
 				slot.offsetY ?? 0
 			);
+
+			if (options.showSlotNumbers) {
+				const badgeSize = Math.max(22, Math.round(stripW * 0.055));
+				const badgeX = sx + 8;
+				const badgeY = sy + 8;
+				ctx.save();
+				ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+				roundRect(ctx, badgeX, badgeY, badgeSize, badgeSize, 6);
+				ctx.fill();
+				ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+				ctx.lineWidth = 1;
+				ctx.stroke();
+
+				ctx.fillStyle = '#FFFFFF';
+				ctx.font = `700 ${Math.round(badgeSize * 0.6)}px 'Inter', sans-serif`;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				const numLabel = slot.name && /^[0-9]+$/.test(slot.name) ? slot.name : `${idx + 1}`;
+				ctx.fillText(numLabel, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+				ctx.restore();
+			}
 		} else {
-			// Clear empty slot state
+			// Clear empty slot state with prominent slot number in center
 			ctx.fillStyle = '#E2E8F0';
 			ctx.fillRect(sx, sy, sw, sh);
-			ctx.fillStyle = '#64748B';
-			const labelSize = Math.max(12, Math.round(sw * 0.08));
-			ctx.font = `600 ${labelSize}px 'Inter', sans-serif`;
+
+			const numStr = slot.name && /^[0-9]+$/.test(slot.name) ? slot.name : `${idx + 1}`;
+			const numSize = Math.max(28, Math.round(Math.min(sw, sh) * 0.28));
+			ctx.fillStyle = '#475569';
+			ctx.font = `800 ${numSize}px 'Inter', sans-serif`;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
-			ctx.fillText(slot.name || `Slot ${idx + 1}`, sx + sw / 2, sy + sh / 2);
+			ctx.fillText(numStr, sx + sw / 2, sy + sh / 2);
 		}
 
 		ctx.restore();

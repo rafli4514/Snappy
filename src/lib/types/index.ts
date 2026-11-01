@@ -201,6 +201,8 @@ export interface RenderOptions {
 	/** Draw editor wireframes over slots (template builder mode). */
 	showWireframes?: boolean;
 	selectedSlotId?: string | null;
+	/** Draw slot number badges (1, 2, 3...) on preview slots. Defaults to true in editor. */
+	showSlotNumbers?: boolean;
 }
 
 // ─── Gallery sessions ────────────────────────────────────────────────────────

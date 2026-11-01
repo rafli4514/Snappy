@@ -46,7 +46,7 @@
       class:grid-6={photoCount === 6}
     >
       {#each photos as photo, i}
-        <PhotoCard {photo} index={i} on:zoom={() => zoomModal.open(photo, i)} />
+        <PhotoCard {photo} index={i} on:zoom={() => zoomModal.open(photo, i)} on:retake={() => retakeOne(i)} />
       {/each}
     </div>
   </div>

@@ -56,6 +56,9 @@
     padding: 0;
     background: transparent;
     overflow: visible;
+    margin: auto;
+    max-width: 100vw;
+    max-height: 100dvh;
   }
 
   .zoom-modal::backdrop {
@@ -64,7 +67,7 @@
 
   .zoom-box {
     position: relative;
-    width: min(88vw, 560px);
+    width: min(92vw, 720px);
     padding: 10px;
     background: var(--bg);
     border: 1px solid var(--hairline);

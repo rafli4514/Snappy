@@ -116,7 +116,6 @@
       canSwitch = await hasMultipleCameras();
       if (videoEl) await attachStream(videoEl, stream);
       isLoading = false;
-      if ($session.retakeIndex !== null) await startCaptureSession();
     } catch (err) {
       isLoading = false;
       errorType = getCameraErrorMessage(err);
@@ -244,7 +243,7 @@
       countdownValue = null;
       if (i < totalShots - 1) {
         currentPhotoNum++;
-        await new Promise((r) => setTimeout(r, 650));
+        await new Promise((r) => setTimeout(r, 600));
       }
     }
 
