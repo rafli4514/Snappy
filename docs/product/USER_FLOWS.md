@@ -8,6 +8,7 @@
 ## Flow 1 — Camera Initialization
 
 ### Normal Flow
+
 1. User taps **Start Photobooth** on the start screen.
 2. App calls `navigator.mediaDevices.getUserMedia({ video: true })`.
 3. Browser displays the permission prompt.
@@ -18,6 +19,7 @@
 8. Camera loading indicator disappears; live preview is visible.
 
 ### Failure: Permission Denied
+
 1. User taps **Start Photobooth**.
 2. Permission prompt appears.
 3. User denies permission (or it was previously denied).
@@ -29,12 +31,14 @@
    - A **Try Again** button that re-attempts initialization.
 
 ### Failure: No Camera Found
+
 1. `getUserMedia` rejects with `NotFoundError`.
 2. App shows **No Camera** error screen with:
    - Friendly illustration.
    - Suggestion to check camera connection.
 
 ### Failure: Camera In Use
+
 1. `getUserMedia` rejects with `NotReadableError` or `AbortError`.
 2. App shows **Camera Busy** error screen with guidance to close other apps.
 
@@ -43,6 +47,7 @@
 ## Flow 2 — Capture Session
 
 ### Normal Flow
+
 1. Live preview visible; user taps **Start Session**.
 2. App begins the capture loop for N photos (default 4).
 3. For each photo slot:
@@ -54,6 +59,7 @@
 4. After all photos: camera tracks stopped; app transitions to Photo Review.
 
 ### Edge Cases
+
 - **User leaves page:** `beforeunload` listener stops camera tracks.
 - **Camera disconnects:** `MediaStreamTrack.onended` triggers error state.
 - **Session already running:** capture button disabled during countdown.
@@ -89,12 +95,14 @@
 ## Flow 4 — Photo Review and Retake
 
 ### Normal Review Flow
+
 1. Review screen shows N photo thumbnails in a grid.
 2. Each thumbnail has a **Retake** button.
 3. A **Retake All** button appears at the bottom.
 4. A **Continue** button is available when the user is satisfied.
 
 ### Retake Individual Photo (FR-016, FR-018)
+
 1. User taps **Retake** on photo N.
 2. Camera re-initializes for one shot.
 3. Countdown fires for that single shot.
@@ -103,11 +111,13 @@
 6. Camera stops; user returns to review.
 
 ### Retake All
+
 1. User taps **Retake All**.
 2. All photo slots are cleared.
 3. Camera initializes; full capture session restarts from photo 1.
 
 ### Continue
+
 1. User taps **Continue**.
 2. App transitions to Photo-Strip Editor.
 3. Photos passed to composition engine.

@@ -25,6 +25,6 @@ export const GET: RequestHandler = () => {
 
 	return json({
 		ip: lanIp,
-		allIps: ips,
+		allIps: ips
 	});
 };

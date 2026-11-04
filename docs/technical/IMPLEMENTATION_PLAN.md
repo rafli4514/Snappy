@@ -184,4 +184,3 @@
 - [x] Documentation updated (`PRD.md`, `DESIGN_SYSTEM.md`, `PRINT_SPECIFICATION.md`, `ARCHITECTURE.md`, `TEST_PLAN.md`, `OPERATOR_GUIDE.md`).
 
 **Completion criterion:** Operator can upload custom artwork, create irregular polygon slots, map photos, save to library, and print on 4R paper with two strips side-by-side.
-

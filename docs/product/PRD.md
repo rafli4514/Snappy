@@ -19,12 +19,14 @@ DISTUDIO Photobooth is a mobile-first web application that lets users take a seq
 ## 2. Target Users and Primary Usage Scenarios
 
 ### Target Users
+
 - Event attendees at parties, weddings, and celebrations.
 - Small businesses running pop-up photobooth stations.
 - Individuals who want a fun, tactile photo-strip keepsake.
 - Creative professionals demoing interactive print installations.
 
 ### Primary Usage Scenarios
+
 1. **Event kiosk:** Tablet or laptop on a stand with a rear camera. Guests walk up, take photos, and print strips.
 2. **Personal use:** User opens the app on their phone, takes selfies, downloads the strip.
 3. **Creative studio:** Designer tests custom strip templates before printing.
@@ -44,6 +46,7 @@ DISTUDIO Photobooth is a mobile-first web application that lets users take a seq
 ## 4. MVP Scope
 
 The MVP includes:
+
 - Camera initialization and permission handling.
 - Countdown-based capture of 3 or 4 photos per session.
 - Photo review with individual retake capability.
@@ -92,6 +95,7 @@ The MVP includes:
 ## 7. Functional Requirements
 
 ### Camera
+
 - **FR-001** — The app shall request camera access only when the user taps "Start Photobooth".
 - **FR-002** — The app shall display a live video preview after permission is granted.
 - **FR-003** — The app shall support front camera on mobile devices.
@@ -102,6 +106,7 @@ The MVP includes:
 - **FR-008** — The app shall stop all camera tracks when the camera workflow is exited.
 
 ### Capture Session
+
 - **FR-009** — The app shall capture a configurable sequence of 3 or 4 photos per session (default: 4).
 - **FR-010** — A visible countdown (3-2-1) shall precede each photo capture.
 - **FR-011** — Capture shall be triggered automatically at the end of each countdown.
@@ -110,6 +115,7 @@ The MVP includes:
 - **FR-014** — The app shall display a thumbnail flash effect on capture.
 
 ### Photo Review
+
 - **FR-015** — All captured photos shall be displayed in a grid after a session.
 - **FR-016** — The user shall be able to retake an individual photo.
 - **FR-017** — The user shall be able to retake the entire session.
@@ -117,6 +123,7 @@ The MVP includes:
 - **FR-019** — The user shall proceed to composition after approving the set.
 
 ### Photo-Strip Editor
+
 - **FR-020** — The app shall provide at least 3 visual strip design presets.
 - **FR-021** — The strip preview shall reflect the actual rendered output.
 - **FR-022** — The user shall be able to add a short caption text.
@@ -124,6 +131,7 @@ The MVP includes:
 - **FR-024** — The user shall be able to return to photo review from the editor.
 
 ### Export and Printing
+
 - **FR-025** — The app shall render the final strip to a PNG at print resolution.
 - **FR-026** — The app shall provide a Download PNG button.
 - **FR-027** — The app shall provide a Print button that opens the browser print dialog.
@@ -132,6 +140,7 @@ The MVP includes:
 - **FR-030** — The app shall display setup guidance for the user before printing.
 
 ### Custom Template Builder (Revision Add-On)
+
 - **FR-033** — The app shall provide downloadable product-size strip guides (SVG, 300 DPI) — Big shot 13×7 cm, Two up 15×5 cm, Three up 15×6 cm, Two by two / Five up / Six up 10×15 cm — plus a 4 × 6″ 4R print-sheet (1200 × 1800 px, 300 DPI) design template with safe margins and cutting guides.
 - **FR-034** — The app shall support importing custom frame artwork in PNG and SVG formats with validation for resolution, aspect ratio, and transparency.
 - **FR-035** — The app shall provide an interactive visual photo-slot editor supporting rectangular, irregular polygon, and circular slot geometries with drag-to-move, corner resize, and vertex handle manipulation.
@@ -141,6 +150,7 @@ The MVP includes:
 - **FR-039** — The app shall apply unified composition rules across on-screen preview, PNG export, and 4R physical print (2 identical custom strips side-by-side with cutting guide).
 
 ### Session Management
+
 - **FR-031** — The user shall be able to start a new session after completing the flow.
 - **FR-032** — Starting a new session shall clear all captured photos from memory.
 
@@ -163,17 +173,17 @@ The MVP includes:
 
 ## 9. User Stories and Acceptance Criteria
 
-| ID | Story | Acceptance Criteria |
-|----|-------|---------------------|
-| US-001 | As a user, I want to see the app open directly into a photobooth experience so I don't navigate a marketing page. | Start screen loads without routing to a landing page. |
-| US-002 | As a user, I want to grant camera access only when I choose to start. | Camera permission prompt appears only after tapping "Start Photobooth". |
-| US-003 | As a user, I want a live preview so I can position myself. | Video stream appears within 2 seconds of granting permission on a fast connection. |
-| US-004 | As a user, I want a countdown before each shot so I can pose. | "3", "2", "1" appear on screen before each capture fires. |
-| US-005 | As a user, I want to retake an individual photo without starting over. | Tapping retake on photo N re-opens the camera for that slot only. |
-| US-006 | As a user, I want to see my photos in a strip template. | After review, photos appear in the selected template in the correct order. |
-| US-007 | As a user, I want to download the strip as a PNG. | Tapping Download saves a PNG file to my device. |
-| US-008 | As a user, I want to print the strip. | Tapping Print opens the browser print dialog with the correct layout. |
-| US-009 | As a user, I want to start a new session after printing. | A "New Session" button resets all state and returns to the start screen. |
+| ID     | Story                                                                                                             | Acceptance Criteria                                                                |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| US-001 | As a user, I want to see the app open directly into a photobooth experience so I don't navigate a marketing page. | Start screen loads without routing to a landing page.                              |
+| US-002 | As a user, I want to grant camera access only when I choose to start.                                             | Camera permission prompt appears only after tapping "Start Photobooth".            |
+| US-003 | As a user, I want a live preview so I can position myself.                                                        | Video stream appears within 2 seconds of granting permission on a fast connection. |
+| US-004 | As a user, I want a countdown before each shot so I can pose.                                                     | "3", "2", "1" appear on screen before each capture fires.                          |
+| US-005 | As a user, I want to retake an individual photo without starting over.                                            | Tapping retake on photo N re-opens the camera for that slot only.                  |
+| US-006 | As a user, I want to see my photos in a strip template.                                                           | After review, photos appear in the selected template in the correct order.         |
+| US-007 | As a user, I want to download the strip as a PNG.                                                                 | Tapping Download saves a PNG file to my device.                                    |
+| US-008 | As a user, I want to print the strip.                                                                             | Tapping Print opens the browser print dialog with the correct layout.              |
+| US-009 | As a user, I want to start a new session after printing.                                                          | A "New Session" button resets all state and returns to the start screen.           |
 
 ---
 
@@ -202,6 +212,7 @@ The MVP includes:
 ## 12. MVP Success Criteria
 
 The MVP is considered complete when:
+
 1. The app starts and opens without a login page.
 2. Camera preview works in Chrome and Safari on desktop and mobile.
 3. A user can complete the full journey: start → capture → review → design → export.

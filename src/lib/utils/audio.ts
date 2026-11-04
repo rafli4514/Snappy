@@ -4,36 +4,36 @@ let lastCountAudio: HTMLAudioElement | null = null;
 
 export function initAudio(): void {
 	if (typeof window !== 'undefined' && !countAudio) {
-		countAudio = new Audio('/audio/count.m4a')
-		lastCountAudio = new Audio('/audio/last_count.m4a')
-		shutterAudio = new Audio('/audio/shutter_click.mp3')
+		countAudio = new Audio('/audio/count.m4a');
+		lastCountAudio = new Audio('/audio/last_count.m4a');
+		shutterAudio = new Audio('/audio/shutter_click.mp3');
 
-		countAudio.load()
-		lastCountAudio.load()
-		shutterAudio.load()
+		countAudio.load();
+		lastCountAudio.load();
+		shutterAudio.load();
 	}
 }
 
 export function playSound(type: 'count' | 'lastCount' | 'shutter'): void {
 	try {
-		if (!countAudio || !lastCountAudio || !shutterAudio ) initAudio();
+		if (!countAudio || !lastCountAudio || !shutterAudio) initAudio();
 
 		const audioMap: Record<'count' | 'lastCount' | 'shutter', HTMLAudioElement | null> = {
-      count: countAudio,
-      lastCount: lastCountAudio,
-      shutter: shutterAudio,
+			count: countAudio,
+			lastCount: lastCountAudio,
+			shutter: shutterAudio
 		};
 
 		const audio = audioMap[type];
 
 		if (audio) {
 			const soundInstance = audio.cloneNode() as HTMLAudioElement;
-      soundInstance.currentTime = 0;
-      soundInstance.play().catch((err) => console.warn('Audio Blocked:', err));
+			soundInstance.currentTime = 0;
+			soundInstance.play().catch((err) => console.warn('Audio Blocked:', err));
 		}
- 	}		catch (err) {
-			console.warn('Audio error: ', err)
-		}
+	} catch (err) {
+		console.warn('Audio error: ', err);
+	}
 }
 
 /**

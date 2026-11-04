@@ -6,7 +6,7 @@
 
 // ─── App shell ────────────────────────────────────────────────────────────────
 
-export type Screen = 'start' | 'strip' | 'camera' | 'review' | 'editor' | 'print';
+export type Screen = 'start' | 'strip' | 'camera' | 'review' | 'editor' | 'edit' | 'print';
 
 export type KioskTheme = 'dark' | 'light';
 
@@ -45,6 +45,12 @@ export interface SessionState {
 	customTemplateData: CustomTemplate | null;
 	theme: KioskTheme;
 	cameraSettings: CameraSettings;
+	/** Per-photo edit transforms (rotation / flip / zoom) for the edit screen. */
+	photoTransforms: (PhotoTransform | null)[];
+	/** Sticker layers placed on the strip (editor edit screen). */
+	stickers: StickerLayer[];
+	/** Active color filter for the strip (editor edit screen). */
+	photoFilter: string | null;
 }
 
 // ─── Custom templates (IndexedDB / localStorage persisted) ───────────────────
@@ -69,6 +75,8 @@ export interface CustomSlot {
 	height: number;
 	/** Degrees; rect slots only. */
 	borderRadius?: number;
+	/** Slot rotation in degrees (default 0). */
+	rotation?: number;
 	/** Normalized coordinates for polygon slots (3+ points). */
 	points?: SlotPoint[];
 	/** 0, 1, 2, 3… or null when the slot is empty. */
@@ -142,6 +150,29 @@ export interface BuiltinSticker {
 	svg: string;
 }
 
+/** Per-photo edit transform: rotation (0/90/180/270), mirror, zoom. */
+export interface PhotoTransform {
+	rotation?: number;
+	flipH?: boolean;
+	scale?: number;
+	/** Pan sumbu X (−1..1, fraksi dari ruang crop tersedia) — drag foto */
+	offsetX?: number;
+	/** Pan sumbu Y (−1..1, fraksi dari ruang crop tersedia) — drag foto */
+	offsetY?: number;
+}
+
+/** Sticker placed on the strip; x/y/w/h are normalized 0..1 of the strip. */
+export interface StickerLayer {
+	id: string;
+	stickerId: string;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	rotation?: number;
+	opacity?: number;
+}
+
 // ─── Built-in strip presets ──────────────────────────────────────────────────
 
 export interface BuiltinTemplate {
@@ -203,6 +234,14 @@ export interface RenderOptions {
 	selectedSlotId?: string | null;
 	/** Draw slot number badges (1, 2, 3...) on preview slots. Defaults to true in editor. */
 	showSlotNumbers?: boolean;
+	/** Per-photo rotation / flip / zoom applied on top of the slot layout. */
+	photoTransforms?: (PhotoTransform | null)[];
+	/** Stickers placed on the strip (edit screen). */
+	stickers?: StickerLayer[];
+	/** Color filter key while rendering photos ('none' = plain). */
+	photoFilter?: string | null;
+	/** Index slot yang sedang terpilih di strip (indikator edit screen). */
+	selectedSlot?: number | null;
 }
 
 // ─── Gallery sessions ────────────────────────────────────────────────────────

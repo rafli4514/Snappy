@@ -80,7 +80,7 @@ export function runCountdown({
 	from,
 	onTick,
 	onCapture,
-	intervalMs = 1000,
+	intervalMs = 1000
 }: CountdownOptions): CountdownHandle {
 	let current = from;
 	let cancelled = false;
@@ -105,6 +105,6 @@ export function runCountdown({
 		cancel() {
 			cancelled = true;
 			clearInterval(id);
-		},
+		}
 	};
 }

@@ -7,12 +7,12 @@
 
 ## 1. Media Preset — 4R Photo Paper
 
-| Property | Value |
-|----------|-------|
-| Paper name | 4R |
-| Nominal width | 101.6 mm (4 inches) |
-| Nominal height | 152.4 mm (6 inches) |
-| Aspect ratio | 2 : 3 |
+| Property                  | Value                           |
+| ------------------------- | ------------------------------- |
+| Paper name                | 4R                              |
+| Nominal width             | 101.6 mm (4 inches)             |
+| Nominal height            | 152.4 mm (6 inches)             |
+| Aspect ratio              | 2 : 3                           |
 | Default print orientation | Landscape (rotated) or Portrait |
 
 > **Note:** Physical printable area varies by printer and driver. Typical borderless printers support full bleed; most inkjets leave a 3–5 mm margin on each edge in bordered mode. All dimensions stated here are nominal targets.
@@ -23,14 +23,14 @@
 
 Setiap jumlah foto memetakan ke **satu produk cetak berukuran nyata** (mengikuti price list "Custom Ukuran"). Semua produk dicetak di kertas **4R (10,2 × 15,2 cm)**; orientasi dan jumlah salinan mengikuti produk.
 
-| # | Produk | Ukuran cetak | Opsi foto | Salinan per lembar 4R | Orientasi lembar |
-|---|--------|--------------|-----------|----------------------|------------------|
-| 1 | **Big shot** | 13 × 7 cm | 1 foto menyamping | 1 | Landscape (1800 × 1200 px) |
-| 2 | **Two up** | 15 × 5 cm | 2 foto potret tumpuk | 2 berdampingan | Portrait (1200 × 1800 px) |
-| 3 | **Three up** | 15 × 6 cm | 3 foto menyamping tumpuk | 1 | Portrait |
-| 4 | **Two by two** | 10 × 15 cm | grid 2 × 2 | 1 | Portrait |
-| 5 | **Five up** | 10 × 15 cm | 2 × 2 + 1 lebar | 1 | Portrait |
-| 6 | **Six up** | 10 × 15 cm | grid 2 × 3 | 1 | Portrait |
+| #   | Produk         | Ukuran cetak | Opsi foto                | Salinan per lembar 4R | Orientasi lembar           |
+| --- | -------------- | ------------ | ------------------------ | --------------------- | -------------------------- |
+| 1   | **Big shot**   | 13 × 7 cm    | 1 foto menyamping        | 1                     | Landscape (1800 × 1200 px) |
+| 2   | **Two up**     | 15 × 5 cm    | 2 foto potret tumpuk     | 2 berdampingan        | Portrait (1200 × 1800 px)  |
+| 3   | **Three up**   | 15 × 6 cm    | 3 foto menyamping tumpuk | 1                     | Portrait                   |
+| 4   | **Two by two** | 10 × 15 cm   | grid 2 × 2               | 1                     | Portrait                   |
+| 5   | **Five up**    | 10 × 15 cm   | 2 × 2 + 1 lebar          | 1                     | Portrait                   |
+| 6   | **Six up**     | 10 × 15 cm   | grid 2 × 3               | 1                     | Portrait                   |
 
 Aturan lembar:
 
@@ -60,14 +60,14 @@ Aturan lembar:
 - The on-screen strip preview is rendered at **CSS pixel size** (e.g., 300 × 900 px) for responsiveness.
 - The **export canvas** is rendered at a fixed print resolution target of **300 DPI equivalent**.
 
-| Measurement | Value |
-|-------------|-------|
-| Lembar 4R portrait | 101,6 × 152,4 mm × 11,81 px/mm ≈ **1200 × 1800 px** |
-| Lembar 4R landscape (Big shot) | **1800 × 1200 px** |
-| Big shot | 130 × 70 mm ≈ **1536 × 828 px** |
-| Two up | 50 × 150 mm ≈ **591 × 1772 px** |
-| Three up | 60 × 150 mm ≈ **709 × 1772 px** |
-| Two by two / Five up / Six up | 100 × 150 mm ≈ **1181 × 1772 px** |
+| Measurement                    | Value                                               |
+| ------------------------------ | --------------------------------------------------- |
+| Lembar 4R portrait             | 101,6 × 152,4 mm × 11,81 px/mm ≈ **1200 × 1800 px** |
+| Lembar 4R landscape (Big shot) | **1800 × 1200 px**                                  |
+| Big shot                       | 130 × 70 mm ≈ **1536 × 828 px**                     |
+| Two up                         | 50 × 150 mm ≈ **591 × 1772 px**                     |
+| Three up                       | 60 × 150 mm ≈ **709 × 1772 px**                     |
+| Two by two / Five up / Six up  | 100 × 150 mm ≈ **1181 × 1772 px**                   |
 
 Px = cm ÷ 2,54 × 300, dibulatkan. **Pratinjau di layar selalu miniatur persis** — geometri slot dihitung di ruang acuan produk lalu diskalakan seragam ke ukuran kanvas apa pun.
 
@@ -75,14 +75,14 @@ Px = cm ÷ 2,54 × 300, dibulatkan. **Pratinjau di layar selalu miniatur persis*
 
 Ukuran slot mengikuti `PRODUK[count].rows` di `canvas.js` (px ruang acuan 300 DPI). Contoh slot per produk:
 
-| Produk | Slot |
-|--------|------|
-| Big shot | 1 slot menyamping 1456 × 616 px |
-| Two up | 2 slot potret 551 × 783 px |
-| Three up | 3 slot menyamping 665 × 515 px |
-| Two by two | 4 slot 546 × 757 px (grid 2×2) |
-| Five up | 4 slot 546 × 620 px + 1 slot lebar 1117 × 250 px |
-| Six up | 6 slot 546 × 498 px (grid 2×3) |
+| Produk     | Slot                                             |
+| ---------- | ------------------------------------------------ |
+| Big shot   | 1 slot menyamping 1456 × 616 px                  |
+| Two up     | 2 slot potret 551 × 783 px                       |
+| Three up   | 3 slot menyamping 665 × 515 px                   |
+| Two by two | 4 slot 546 × 757 px (grid 2×2)                   |
+| Five up    | 4 slot 546 × 620 px + 1 slot lebar 1117 × 250 px |
+| Six up     | 6 slot 546 × 498 px (grid 2×3)                   |
 
 ---
 
@@ -107,14 +107,14 @@ Ukuran slot mengikuti `PRODUK[count].rows` di `canvas.js` (px ruang acuan 300 DP
 
 ## 6. Image Quality Requirements
 
-| Requirement | Value |
-|-------------|-------|
-| Export format | PNG (lossless) |
-| Color space | sRGB |
-| Export canvas size | per produk: 1200 × 1800 px (portrait) atau 1800 × 1200 px (Big shot) |
-| Per-strip size | ukuran sejati produk (mis. 591 × 1772 px untuk Two up) di tengah lembar |
-| Minimum camera capture | 640 × 480 px (wider accepted) |
-| Canvas rendering quality | `imageSmoothingQuality: 'high'` |
+| Requirement              | Value                                                                   |
+| ------------------------ | ----------------------------------------------------------------------- |
+| Export format            | PNG (lossless)                                                          |
+| Color space              | sRGB                                                                    |
+| Export canvas size       | per produk: 1200 × 1800 px (portrait) atau 1800 × 1200 px (Big shot)    |
+| Per-strip size           | ukuran sejati produk (mis. 591 × 1772 px untuk Two up) di tengah lembar |
+| Minimum camera capture   | 640 × 480 px (wider accepted)                                           |
+| Canvas rendering quality | `imageSmoothingQuality: 'high'`                                         |
 
 ---
 
@@ -122,29 +122,29 @@ Ukuran slot mengikuti `PRODUK[count].rows` di `canvas.js` (px ruang acuan 300 DP
 
 ```css
 @media print {
-  @page {
-    size: 4in 6in;
-    margin: 0;
-  }
+	@page {
+		size: 4in 6in;
+		margin: 0;
+	}
 
-  body * {
-    visibility: hidden;
-  }
+	body * {
+		visibility: hidden;
+	}
 
-  #print-layout,
-  #print-layout * {
-    visibility: visible;
-  }
+	#print-layout,
+	#print-layout * {
+		visibility: visible;
+	}
 
-  #print-layout {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 4in;
-    height: 6in;
-    display: flex;
-    flex-direction: row;
-  }
+	#print-layout {
+		position: fixed;
+		left: 0;
+		top: 0;
+		width: 4in;
+		height: 6in;
+		display: flex;
+		flex-direction: row;
+	}
 }
 ```
 
@@ -169,6 +169,7 @@ If your printer does not support borderless printing, set a small margin and exp
 ## 9. Cutting Guidance
 
 After printing:
+
 - Cut along the vertical center line to separate the two strips.
 - Each strip should be approximately 2 inches wide and 6 inches tall.
 - A printed dashed guide line between strips assists cutting.
@@ -177,12 +178,12 @@ After printing:
 
 ## 10. Download Format
 
-| Property | Value |
-|----------|-------|
-| Format | PNG |
-| Filename pattern | `distudio-strip-YYYYMMDD-HHMMSS.png` |
-| Dimensions | per produk: 1200 × 1800 px, atau 1800 × 1200 px (Big shot) |
-| Color | sRGB |
+| Property         | Value                                                      |
+| ---------------- | ---------------------------------------------------------- |
+| Format           | PNG                                                        |
+| Filename pattern | `distudio-strip-YYYYMMDD-HHMMSS.png`                       |
+| Dimensions       | per produk: 1200 × 1800 px, atau 1800 × 1200 px (Big shot) |
+| Color            | sRGB                                                       |
 
 ---
 
@@ -191,6 +192,7 @@ After printing:
 Since physical printer output cannot be tested in this environment:
 
 ### Calibration Procedure
+
 1. Print the test image on 4R paper.
 2. Using a ruler, measure the actual printed width of one strip.
 3. Compare to target — ukuran produk aktif (tabel seksi 2; mis. Two up ≈ 50 × 150 mm).
@@ -198,6 +200,7 @@ Since physical printer output cannot be tested in this environment:
 5. Document the calibration offset per printer model.
 
 ### Test Print Checklist
+
 - [ ] Print dialog shows correct paper size (4 × 6 in).
 - [ ] Both strips appear side by side.
 - [ ] No photos are cropped unexpectedly.
@@ -221,10 +224,10 @@ Since physical printer output cannot be tested in this environment:
 
 ### Downloadable Template Assets
 
-| Asset | Physical Dimensions | Raster Dimensions (300 DPI) | File Path / Format | Notes |
-|-------|---------------------|-----------------------------|-------------------|-------|
-| **Product Strip Guides (1–6 foto)** | Ukuran nyata per produk: Big shot 13×7 cm (1536×828 px), Two up 15×5 cm (591×1772 px), Three up 15×6 cm (709×1772 px), Two by two / Five up / Six up 10×15 cm (1181×1772 px) | sesuai produk | `/templates/strip-template-{bigshot,twoup,threeup,twobytwo,fiveup,sixup}.svg` | Margin aman cetak + susunan slot di lapisan panduan terpisah (`id="guides-layer"`), geometri = persis `PRODUK[count].rows` |
-| **4R Print Sheet Guide** | 4 × 6 inches | 1200 × 1800 px | `/templates/sheet-template-4r.svg` | Demonstrates two 2 × 6″ strips side-by-side with center cutting line (X = 600px) |
+| Asset                               | Physical Dimensions                                                                                                                                                          | Raster Dimensions (300 DPI) | File Path / Format                                                            | Notes                                                                                                                      |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Product Strip Guides (1–6 foto)** | Ukuran nyata per produk: Big shot 13×7 cm (1536×828 px), Two up 15×5 cm (591×1772 px), Three up 15×6 cm (709×1772 px), Two by two / Five up / Six up 10×15 cm (1181×1772 px) | sesuai produk               | `/templates/strip-template-{bigshot,twoup,threeup,twobytwo,fiveup,sixup}.svg` | Margin aman cetak + susunan slot di lapisan panduan terpisah (`id="guides-layer"`), geometri = persis `PRODUK[count].rows` |
+| **4R Print Sheet Guide**            | 4 × 6 inches                                                                                                                                                                 | 1200 × 1800 px              | `/templates/sheet-template-4r.svg`                                            | Demonstrates two 2 × 6″ strips side-by-side with center cutting line (X = 600px)                                           |
 
 ### Custom Composition & 4R Duplication Rules
 
@@ -232,4 +235,3 @@ Since physical printer output cannot be tested in this environment:
 2. **Automated 4R Layout:** Salinan ditempatkan **ukuran sejati di tengah lembar** — Two up: dua salinan di X ≈ 1 px dan X ≈ 608 px pada kanvas 1200 × 1800; produk lain: satu salinan.
 3. **Center Cutting Guide:** Garis putus 1,5 px (alpha 0,2) otomatis di X = 600 px hanya saat 2 salinan, untuk bantuan pemotongan fisik.
 4. **Resolution Parity:** Both on-screen previews and final print outputs share the exact same normalized coordinate clipping pipeline, ensuring zero visual discrepancy between preview and printed result.
-

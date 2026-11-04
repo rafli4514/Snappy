@@ -2,7 +2,7 @@
 
 **DISTUDIO Photobooth**  
 **Version:** 1.0  
-**Target:** Event Operators, Photobooth Kiosk Managers, and Studio Designers  
+**Target:** Event Operators, Photobooth Kiosk Managers, and Studio Designers
 
 ---
 
@@ -89,7 +89,7 @@ Open the SVG in Figma, Photoshop, Illustrator, or Affinity Designer.
 
 1. Switch to the **Photo Mapping** tab (or use the inline assignment panel on the main Editor screen).
 2. For each slot, choose which countdown photo to display:
-   - *Example:* Slot 1 → Photo #2, Slot 2 → Photo #1, Slot 3 → Photo #4.
+   - _Example:_ Slot 1 → Photo #2, Slot 2 → Photo #1, Slot 3 → Photo #4.
 3. Use the **Photo Zoom** slider (0.8x to 2.5x) and **Pan X / Pan Y** sliders to adjust the crop and positioning of the subject inside the slot.
 4. Toggle to **✨ Live Composite** mode in the workspace toolbar to see the final rendered output with actual photos clipped inside your custom shapes!
 
@@ -97,7 +97,7 @@ Open the SVG in Figma, Photoshop, Illustrator, or Affinity Designer.
 
 ### 5. Save and Reuse
 
-1. Enter a descriptive template name (e.g., *"Summer Wedding 2026"*).
+1. Enter a descriptive template name (e.g., _"Summer Wedding 2026"_).
 2. Click **Save & Apply Strip**.
    - The template is saved to your browser's local database (IndexedDB) and will persist across browser restarts and reloads.
    - It is immediately applied to the current photobooth session.

@@ -7,11 +7,11 @@
 
 ## Prerequisites
 
-| Tool | Required Version | Verified |
-|------|-----------------|---------|
-| Node.js | >= 18.x | ✅ v24.14.1 |
-| npm | >= 9.x | ✅ v11.11.0 |
-| Modern browser | Chrome 100+, Safari 15+, Firefox 110+ | — |
+| Tool           | Required Version                      | Verified    |
+| -------------- | ------------------------------------- | ----------- |
+| Node.js        | >= 18.x                               | ✅ v24.14.1 |
+| npm            | >= 9.x                                | ✅ v11.11.0 |
+| Modern browser | Chrome 100+, Safari 15+, Firefox 110+ | —           |
 
 ---
 
@@ -72,10 +72,10 @@ d:\Project\DISTUDIO\Code\
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
+| Issue                             | Solution                                                |
+| --------------------------------- | ------------------------------------------------------- |
 | Camera not available on localhost | Ensure browser is Chrome/Firefox; Safari requires HTTPS |
-| `getUserMedia is not a function` | App not served over HTTPS or localhost |
-| Port 5173 in use | Run `npm run dev -- --port 5174` |
-| Fonts not loading | Check internet connection; fonts loaded from Google CDN |
-| Build fails | Run `npm install` first; check for missing files |
+| `getUserMedia is not a function`  | App not served over HTTPS or localhost                  |
+| Port 5173 in use                  | Run `npm run dev -- --port 5174`                        |
+| Fonts not loading                 | Check internet connection; fonts loaded from Google CDN |
+| Build fails                       | Run `npm install` first; check for missing files        |

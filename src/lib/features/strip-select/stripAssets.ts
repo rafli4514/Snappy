@@ -10,14 +10,14 @@ export interface StripAsset {
 }
 
 export const strips: StripAsset[] = [
-	{ src: '/strips/strip-1.png', len: 2.700 },
+	{ src: '/strips/strip-1.png', len: 2.7 },
 	{ src: '/strips/strip-2.png', len: 2.962 },
 	{ src: '/strips/strip-3.png', len: 2.986 },
 	{ src: '/strips/strip-4.png', len: 2.943 },
 	{ src: '/strips/strip-5.png', len: 2.823 },
 	{ src: '/strips/strip-6.png', len: 2.653 },
 	{ src: '/strips/strip-7.png', len: 2.736 },
-	{ src: '/strips/strip-8.png', len: 2.780 },
+	{ src: '/strips/strip-8.png', len: 2.78 },
 	{ src: '/strips/strip-9.png', len: 2.714 },
 	{ src: '/strips/strip-10.png', len: 2.637 }
 ];

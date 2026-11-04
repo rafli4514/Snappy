@@ -5,5 +5,13 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Installed agent skills and their lockfile (tool-managed, hash-locked)
+/.agents/
+/.opencode/
+/skills-lock.json
+
+# AGENTS.md carries a tool-managed marker block that must stay verbatim
+/AGENTS.md
+
 # Miscellaneous
 /static/

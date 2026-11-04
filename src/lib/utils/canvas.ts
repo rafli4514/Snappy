@@ -7,7 +7,7 @@
  * dan komposisi lembar 4R.
  */
 
-import { getCustomTemplate } from './customTemplateStorage';
+import { getCustomTemplate, BUILTIN_STICKERS } from './customTemplateStorage';
 import {
 	isCustomTemplate,
 	type BuiltinTemplate,
@@ -31,7 +31,7 @@ export const TEMPLATES: Record<string, BuiltinTemplate> = {
 		hairline: '#C7A45C',
 		checkerA: '#EDE7DB',
 		checkerB: '#E1D9C8',
-		slotLine: '#2B26201A',
+		slotLine: '#2B26201A'
 	},
 	cobalt: {
 		id: 'cobalt',
@@ -42,7 +42,7 @@ export const TEMPLATES: Record<string, BuiltinTemplate> = {
 		hairline: '#7E9EC8',
 		checkerA: '#E8EEF8',
 		checkerB: '#DBE4F2',
-		slotLine: '#1D3A6B1A',
+		slotLine: '#1D3A6B1A'
 	},
 	darkroom: {
 		id: 'darkroom',
@@ -53,7 +53,7 @@ export const TEMPLATES: Record<string, BuiltinTemplate> = {
 		hairline: '#6B5F53',
 		checkerA: '#26221F',
 		checkerB: '#1F1B18',
-		slotLine: '#EFE9DD1F',
+		slotLine: '#EFE9DD1F'
 	},
 	lavender: {
 		id: 'lavender',
@@ -64,8 +64,8 @@ export const TEMPLATES: Record<string, BuiltinTemplate> = {
 		hairline: '#B9A7D6',
 		checkerA: '#EBE5F4',
 		checkerB: '#DFD6F0',
-		slotLine: '#44316117',
-	},
+		slotLine: '#44316117'
+	}
 };
 
 /** Produk strip per jumlah foto — ukuran cetak nyata (300 DPI),
@@ -79,62 +79,99 @@ export const PRODUK: Products = {
 	1: {
 		nama: 'Big shot',
 		cm: '13 × 7',
-		pxW: 1536, pxH: 828,
-		margin: 40, hairline: 14, gap: 20, footer: 132,
-		copySheet: 1, sheetOrient: 'landscape',
-		rows: [{ h: 616, cells: [{ w: 1456 }] }],
+		pxW: 1536,
+		pxH: 828,
+		margin: 40,
+		hairline: 14,
+		gap: 20,
+		footer: 132,
+		copySheet: 1,
+		sheetOrient: 'landscape',
+		rows: [{ h: 616, cells: [{ w: 1456 }] }]
 	},
 	2: {
 		nama: 'Two up',
 		cm: '15 × 5',
-		pxW: 591, pxH: 1772,
-		margin: 20, hairline: 10, gap: 16, footer: 150,
-		copySheet: 2, sheetOrient: 'portrait',
-		rows: [{ h: 783, cells: [{ w: 551 }] }, { h: 783, cells: [{ w: 551 }] }],
+		pxW: 591,
+		pxH: 1772,
+		margin: 20,
+		hairline: 10,
+		gap: 16,
+		footer: 150,
+		copySheet: 2,
+		sheetOrient: 'portrait',
+		rows: [
+			{ h: 783, cells: [{ w: 551 }] },
+			{ h: 783, cells: [{ w: 551 }] }
+		]
 	},
 	3: {
 		nama: 'Three up',
 		cm: '15 × 6',
-		pxW: 709, pxH: 1772,
-		margin: 22, hairline: 10, gap: 16, footer: 150,
-		copySheet: 1, sheetOrient: 'portrait',
-		rows: [{ h: 515, cells: [{ w: 665 }] }, { h: 515, cells: [{ w: 665 }] }, { h: 515, cells: [{ w: 665 }] }],
+		pxW: 709,
+		pxH: 1772,
+		margin: 22,
+		hairline: 10,
+		gap: 16,
+		footer: 150,
+		copySheet: 1,
+		sheetOrient: 'portrait',
+		rows: [
+			{ h: 515, cells: [{ w: 665 }] },
+			{ h: 515, cells: [{ w: 665 }] },
+			{ h: 515, cells: [{ w: 665 }] }
+		]
 	},
 	4: {
 		nama: 'Two by two',
 		cm: '10 × 15',
-		pxW: 1181, pxH: 1772,
-		margin: 32, hairline: 12, gap: 24, footer: 170,
-		copySheet: 1, sheetOrient: 'portrait',
+		pxW: 1181,
+		pxH: 1772,
+		margin: 32,
+		hairline: 12,
+		gap: 24,
+		footer: 170,
+		copySheet: 1,
+		sheetOrient: 'portrait',
 		rows: [
 			{ h: 757, cells: [{ w: 546 }, { w: 546 }] },
-			{ h: 757, cells: [{ w: 546 }, { w: 546 }] },
-		],
+			{ h: 757, cells: [{ w: 546 }, { w: 546 }] }
+		]
 	},
 	5: {
 		nama: 'Five up',
 		cm: '10 × 15',
-		pxW: 1181, pxH: 1772,
-		margin: 32, hairline: 12, gap: 24, footer: 170,
-		copySheet: 1, sheetOrient: 'portrait',
+		pxW: 1181,
+		pxH: 1772,
+		margin: 32,
+		hairline: 12,
+		gap: 24,
+		footer: 170,
+		copySheet: 1,
+		sheetOrient: 'portrait',
 		rows: [
 			{ h: 620, cells: [{ w: 546 }, { w: 546 }] },
 			{ h: 620, cells: [{ w: 546 }, { w: 546 }] },
-			{ h: 250, cells: [{ w: 1117 }] },
-		],
+			{ h: 250, cells: [{ w: 1117 }] }
+		]
 	},
 	6: {
 		nama: 'Six up',
 		cm: '10 × 15',
-		pxW: 1181, pxH: 1772,
-		margin: 32, hairline: 12, gap: 24, footer: 170,
-		copySheet: 1, sheetOrient: 'portrait',
+		pxW: 1181,
+		pxH: 1772,
+		margin: 32,
+		hairline: 12,
+		gap: 24,
+		footer: 170,
+		copySheet: 1,
+		sheetOrient: 'portrait',
 		rows: [
 			{ h: 498, cells: [{ w: 546 }, { w: 546 }] },
 			{ h: 498, cells: [{ w: 546 }, { w: 546 }] },
-			{ h: 498, cells: [{ w: 546 }, { w: 546 }] },
-		],
-	},
+			{ h: 498, cells: [{ w: 546 }, { w: 546 }] }
+		]
+	}
 };
 
 /** Produk bawaan bila jumlah di luar 1–6 (jaga-jaga). */
@@ -197,7 +234,9 @@ export function drawCroppedImageWithTransform(
 	dh: number,
 	scale = 1.0,
 	offsetX = 0,
-	offsetY = 0
+	offsetY = 0,
+	rotation = 0,
+	flipH = false
 ): void {
 	const srcAspect = img.naturalWidth / img.naturalHeight;
 	const dstAspect = dw / dh;
@@ -228,22 +267,43 @@ export function drawCroppedImageWithTransform(
 	const sx = Math.max(0, Math.min(maxPanX, cx + offsetX * maxPanX));
 	const sy = Math.max(0, Math.min(maxPanY, cy + offsetY * maxPanY));
 
+	ctx.save();
+	ctx.translate(dx + dw / 2, dy + dh / 2);
+	ctx.rotate((rotation * Math.PI) / 180);
+	if (flipH) ctx.scale(-1, 1);
+	ctx.translate(-(dx + dw / 2), -(dy + dh / 2));
 	ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+	ctx.restore();
 }
 
-/** Load an image from data URL or web URL. */
+/** Load an image from data URL or web URL — di-cache agar render drag mulus. */
+const imageCache = new Map<string, HTMLImageElement>();
+const pendingImages = new Map<string, Promise<HTMLImageElement>>();
+
 export function loadImage(src: string): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		if (!src) {
-			reject(new Error('Empty image source'));
-			return;
-		}
+	if (!src) {
+		return Promise.reject(new Error('Empty image source'));
+	}
+	const cached = imageCache.get(src);
+	if (cached) return Promise.resolve(cached);
+	const pending = pendingImages.get(src);
+	if (pending) return pending;
+	const p = new Promise<HTMLImageElement>((resolve, reject) => {
 		const img = new Image();
 		img.crossOrigin = 'anonymous';
-		img.onload = () => resolve(img);
-		img.onerror = (err) => reject(err);
+		img.onload = () => {
+			imageCache.set(src, img);
+			pendingImages.delete(src);
+			resolve(img);
+		};
+		img.onerror = (err) => {
+			pendingImages.delete(src);
+			reject(err);
+		};
 		img.src = src;
 	});
+	pendingImages.set(src, p);
+	return p;
 }
 
 /** Helper to draw a rounded rectangle path. */
@@ -321,7 +381,7 @@ function drawEmptyBoothSlot(
  * itu, diskalakan ke stripW/pxW & stripH/pxH — pratinjau di ukuran mana pun
  * = miniatur persis hasil cetak.
  */
-function renderBuiltinStrip(
+async function renderBuiltinStrip(
 	ctx: CanvasRenderingContext2D,
 	images: RenderImage[],
 	template: BuiltinTemplate,
@@ -331,8 +391,10 @@ function renderBuiltinStrip(
 	stripW: number,
 	stripH: number,
 	count: number
-): void {
+): Promise<void> {
 	const { caption, showDate } = options;
+	const stickers = options.stickers || [];
+	const photoFilter = options.photoFilter || 'none';
 	const t = template;
 	const p = produkUntuk(count);
 	const k = stripW / p.pxW;
@@ -356,6 +418,8 @@ function renderBuiltinStrip(
 	const usedH = p.rows.reduce((a, r) => a + r.h, 0) * ky + (p.rows.length - 1) * p.gap * ky;
 	let cursorY = areaY + (areaH - usedH) / 2;
 	let slotIndex = 0;
+	let selectedRect: { x: number; y: number; w: number; h: number } | null = null;
+	ctx.filter = photoFilter;
 	for (const row of p.rows) {
 		const rowH = row.h * ky;
 		const rowW = row.cells.reduce((a, c) => a + c.w, 0) * k + (row.cells.length - 1) * p.gap * k;
@@ -363,12 +427,28 @@ function renderBuiltinStrip(
 		for (const cell of row.cells) {
 			const w = cell.w * k;
 			const img = images[slotIndex];
+			if (slotIndex === options.selectedSlot) {
+				selectedRect = { x: cursorX, y: cursorY, w, h: rowH };
+			}
 			if (img) {
 				ctx.save();
 				ctx.beginPath();
 				ctx.rect(cursorX, cursorY, w, rowH);
 				ctx.clip();
-				drawCroppedImage(ctx, img, cursorX, cursorY, w, rowH);
+				const photoTransform = options.photoTransforms?.[slotIndex] ?? null;
+				drawCroppedImageWithTransform(
+					ctx,
+					img,
+					cursorX,
+					cursorY,
+					w,
+					rowH,
+					photoTransform?.scale ?? 1,
+					photoTransform?.offsetX ?? 0,
+					photoTransform?.offsetY ?? 0,
+					photoTransform?.rotation ?? 0,
+					photoTransform?.flipH ?? false
+				);
 				if (options.showSlotNumbers) {
 					const badgeSize = Math.max(22, Math.round(stripW * 0.055));
 					const badgeX = cursorX + 8;
@@ -396,6 +476,33 @@ function renderBuiltinStrip(
 		cursorY += rowH + p.gap * ky;
 	}
 
+	ctx.filter = 'none';
+
+	// Indikator slot terpilih (edit screen): outline putus di sekitar slot terpilih
+	if (selectedRect) {
+		ctx.save();
+		ctx.strokeStyle = t.accent;
+		ctx.lineWidth = Math.max(2, 2.4 * k);
+		ctx.setLineDash([Math.max(6, 10 * k), Math.max(4, 7 * k)]);
+		ctx.strokeRect(selectedRect.x, selectedRect.y, selectedRect.w, selectedRect.h);
+		ctx.restore();
+	}
+
+	// Sticker layers placed on the strip (edit screen)
+	for (const st of stickers) {
+		const sticker = BUILTIN_STICKERS.find((s) => s.id === st.stickerId);
+		if (!sticker) continue;
+		const stickerImg = await loadImage(sticker.svg);
+		ctx.save();
+		ctx.globalAlpha = st.opacity ?? 1;
+		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
+		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
+		const sw = st.w * stripW;
+		const sh = st.h * stripH;
+		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
+		ctx.restore();
+	}
+
 	// Footer: serif title + spaced PHOTO BOOTH mark (± tanggal)
 	const title = (caption || '').trim().slice(0, 30) || p.nama;
 	const cx = stripX + stripW / 2;
@@ -408,25 +515,31 @@ function renderBuiltinStrip(
 
 	try {
 		ctx.letterSpacing = `${Math.round(0.3 * 0.11 * footerH * k)}px`;
-	} catch { /* browser lama: tanpa letterSpacing */ }
+	} catch {
+		/* browser lama: tanpa letterSpacing */
+	}
 	ctx.fillStyle = t.accent;
 	ctx.font = `600 ${Math.round(0.11 * footerH)}px 'Inter', sans-serif`;
 	ctx.fillText('PHOTO BOOTH', cx, footerY + 0.68 * footerH);
 	try {
 		ctx.letterSpacing = '0px';
-	} catch { }
+	} catch {}
 
 	if (showDate) {
-		const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+		const date = new Date().toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
 		ctx.fillStyle = t.ink;
 		try {
 			ctx.letterSpacing = `${Math.round(1.5 * k)}px`;
-		} catch { }
+		} catch {}
 		ctx.font = `${Math.round(0.11 * footerH)}px 'Inter', sans-serif`;
 		ctx.fillText(date.toUpperCase(), cx, footerY + 0.88 * footerH);
 		try {
 			ctx.letterSpacing = '0px';
-		} catch { }
+		} catch {}
 	}
 }
 
@@ -467,6 +580,10 @@ async function renderCustomStrip(
 
 	// 4. Render slots and assigned photographs
 	const slots = template.slots || [];
+	const stickers = options.stickers || [];
+	const photoFilter = options.photoFilter || 'none';
+	ctx.filter = photoFilter;
+	let selectedRect: { x: number; y: number; w: number; h: number; rotation?: number } | null = null;
 	for (let idx = 0; idx < slots.length; idx++) {
 		const slot = slots[idx];
 		const sx = stripX + slot.x * stripW;
@@ -475,6 +592,15 @@ async function renderCustomStrip(
 		const sh = slot.height * stripH;
 
 		ctx.save();
+
+		const slotRotation = ((slot.rotation || 0) * Math.PI) / 180;
+		if (slotRotation) {
+			const cx = sx + sw / 2;
+			const cy = sy + sh / 2;
+			ctx.translate(cx, cy);
+			ctx.rotate(slotRotation);
+			ctx.translate(-cx, -cy);
+		}
 
 		// Setup clipping path based on slot geometry
 		if (slot.type === 'polygon' && Array.isArray(slot.points) && slot.points.length >= 3) {
@@ -504,6 +630,11 @@ async function renderCustomStrip(
 				? slot.assignedPhotoIndex
 				: idx;
 		const img = pIndex >= 0 && pIndex < images.length && images[pIndex] ? images[pIndex] : null;
+		const photoTransform = options.photoTransforms?.[pIndex] ?? null;
+
+		if (idx === options.selectedSlot) {
+			selectedRect = { x: sx, y: sy, w: sw, h: sh, rotation: slotRotation };
+		}
 
 		if (img) {
 			drawCroppedImageWithTransform(
@@ -513,9 +644,11 @@ async function renderCustomStrip(
 				sy,
 				sw,
 				sh,
-				slot.scale ?? 1.0,
-				slot.offsetX ?? 0,
-				slot.offsetY ?? 0
+				photoTransform?.scale ?? slot.scale ?? 1.0,
+				(slot.offsetX ?? 0) + (photoTransform?.offsetX ?? 0),
+				(slot.offsetY ?? 0) + (photoTransform?.offsetY ?? 0),
+				photoTransform?.rotation ?? 0,
+				photoTransform?.flipH ?? false
 			);
 
 			if (options.showSlotNumbers) {
@@ -552,6 +685,40 @@ async function renderCustomStrip(
 			ctx.fillText(numStr, sx + sw / 2, sy + sh / 2);
 		}
 
+		ctx.restore();
+	}
+
+	ctx.filter = 'none';
+
+	// Indikator slot terpilih (edit screen): outline putus di sekitar slot terpilih
+	if (selectedRect) {
+		ctx.save();
+		ctx.strokeStyle = '#2563EB'; // biru sama seperti seleksi wireframes di builder
+		ctx.lineWidth = Math.max(1.5, Math.min(selectedRect.w, selectedRect.h) * 0.012);
+		ctx.setLineDash([Math.max(4, selectedRect.w * 0.05), Math.max(3, selectedRect.h * 0.04)]);
+		if (selectedRect.rotation) {
+			const cx = selectedRect.x + selectedRect.w / 2;
+			const cy = selectedRect.y + selectedRect.h / 2;
+			ctx.translate(cx, cy);
+			ctx.rotate(selectedRect.rotation);
+			ctx.translate(-cx, -cy);
+		}
+		ctx.strokeRect(selectedRect.x, selectedRect.y, selectedRect.w, selectedRect.h);
+		ctx.restore();
+	}
+
+	// Sticker layers placed on the strip (edit screen)
+	for (const st of stickers) {
+		const sticker = BUILTIN_STICKERS.find((s) => s.id === st.stickerId);
+		if (!sticker) continue;
+		const stickerImg = await loadImage(sticker.svg);
+		ctx.save();
+		ctx.globalAlpha = st.opacity ?? 1;
+		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
+		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
+		const sw = st.w * stripW;
+		const sh = st.h * stripH;
+		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
 		ctx.restore();
 	}
 
@@ -608,12 +775,20 @@ async function renderCustomStrip(
 				ctx.fillText(options.caption.slice(0, 30), stripX + stripW / 2, footerY + footerH * 0.4);
 			}
 			if (options.showDate) {
-				const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+				const date = new Date().toLocaleDateString('en-US', {
+					month: 'short',
+					day: 'numeric',
+					year: 'numeric'
+				});
 				ctx.fillStyle = '#FCD34D';
 				ctx.font = `${Math.round(footerH * 0.28)}px 'Inter', sans-serif`;
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
-				ctx.fillText(date, stripX + stripW / 2, footerY + (options.caption ? footerH * 0.75 : footerH * 0.5));
+				ctx.fillText(
+					date,
+					stripX + stripW / 2,
+					footerY + (options.caption ? footerH * 0.75 : footerH * 0.5)
+				);
 			}
 		}
 	}
@@ -693,9 +868,19 @@ export async function renderSingleStrip(
 	const count = images.length || 4;
 	if (isStale?.()) return;
 	if (isCustomTemplate(template)) {
-		await renderCustomStrip(ctx, images, template, options, stripX, stripY, stripW, stripH, isStale);
+		await renderCustomStrip(
+			ctx,
+			images,
+			template,
+			options,
+			stripX,
+			stripY,
+			stripW,
+			stripH,
+			isStale
+		);
 	} else {
-		renderBuiltinStrip(ctx, images, template, options, stripX, stripY, stripW, stripH, count);
+		await renderBuiltinStrip(ctx, images, template, options, stripX, stripY, stripW, stripH, count);
 	}
 }
 
@@ -726,8 +911,15 @@ export async function renderStripPreview(
 	if (isStale?.()) return;
 
 	await renderSingleStrip(
-		ctx, images, template, options,
-		0, 0, canvas.width, canvas.height, isStale
+		ctx,
+		images,
+		template,
+		options,
+		0,
+		0,
+		canvas.width,
+		canvas.height,
+		isStale
 	);
 }
 
@@ -782,7 +974,16 @@ export async function renderExportCanvas(
 
 	const startX = Math.round((SHEET_W - stripW * copies - (copies - 1) * GAP_SALIN) / 2);
 	for (let i = 0; i < copies; i++) {
-		await renderSingleStrip(ctx, images, template, options, startX + i * (stripW + GAP_SALIN), startY, stripW, stripH);
+		await renderSingleStrip(
+			ctx,
+			images,
+			template,
+			options,
+			startX + i * (stripW + GAP_SALIN),
+			startY,
+			stripW,
+			stripH
+		);
 	}
 
 	// Cutting guide line between copies

@@ -3,163 +3,196 @@
    ============================================ */
 
 .review-screen {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  background: var(--bg);
-  color: var(--fg);
-  transition: background-color 220ms ease;
+	min-height: 100dvh;
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	background: var(--bg);
+	color: var(--fg);
+	transition: background-color 220ms ease;
 
-  /* Bayangan bingkai foto — lembut di ivory, lebih dalam di hitam */
-  --card-shadow: 0 14px 34px rgba(11, 10, 9, 0.35);
+	/* Bayangan bingkai foto — lembut di ivory, lebih dalam di hitam */
+	--card-shadow: 0 14px 34px rgba(11, 10, 9, 0.35);
 }
 
 .review-screen.theme-light {
-  --card-shadow: 0 14px 30px rgba(28, 25, 23, 0.14);
+	--card-shadow: 0 14px 30px rgba(28, 25, 23, 0.14);
 }
 
 /* ── Kepala: judul saja, di tengah seperti referensi ── */
 .review-head {
-  display: grid;
-  place-items: center;
-  padding: clamp(20px, 3.4dvh, 34px) clamp(16px, 3vw, 28px) 0;
+	display: grid;
+	place-items: center;
+	padding: clamp(20px, 3.4dvh, 34px) clamp(16px, 3vw, 28px) 0;
 }
 
 .review-title {
-  margin: 0;
-  color: var(--fg);
-  font-size: clamp(1.45rem, 3vw, 2rem);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  text-align: center;
+	margin: 0;
+	color: var(--fg);
+	font-size: clamp(1.45rem, 3vw, 2rem);
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	text-align: center;
 }
 
 /* ── Isi: grid foto di tengah, boleh gulir bila 6 foto ── */
 .review-body {
-  padding: clamp(22px, 3.6dvh, 40px) clamp(20px, 4vw, 36px);
-  overflow-y: auto;
+	padding: clamp(22px, 3.6dvh, 40px) clamp(20px, 4vw, 36px);
+	overflow-y: auto;
 }
 
 .photo-grid {
-  display: grid;
-  gap: clamp(18px, 2.4vw, 26px);
-  width: 100%;
-  max-width: 1020px;
-  margin: 0 auto;
-  padding-bottom: 8px;
+	display: grid;
+	gap: clamp(18px, 2.4vw, 26px);
+	width: 100%;
+	max-width: 1020px;
+	margin: 0 auto;
+	padding-bottom: 8px;
 }
 
-.grid-1 { grid-template-columns: 1fr; max-width: 480px; }
-.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 780px; }
-.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 1020px; }
-.grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 780px; }
-.grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 780px; }
-.grid-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 1020px; }
+.grid-1 {
+	grid-template-columns: 1fr;
+	max-width: 480px;
+}
+.grid-2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	max-width: 780px;
+}
+.grid-3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	max-width: 1020px;
+}
+.grid-4 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	max-width: 780px;
+}
+.grid-5 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	max-width: 780px;
+}
+.grid-6 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	max-width: 1020px;
+}
 
 @media (min-width: 640px) {
-  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 780px; }
-  .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 900px; }
+	.grid-4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		max-width: 780px;
+	}
+	.grid-5 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		max-width: 900px;
+	}
 }
 
 /* ── Aksi bawah: ambil ulang semua · CTA kapsul ── */
 .review-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 14px clamp(16px, 3vw, 28px);
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--ring-line);
-  background: var(--bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding: 14px clamp(16px, 3vw, 28px);
+	padding-bottom: max(14px, env(safe-area-inset-bottom));
+	border-top: 1px solid var(--ring-line);
+	background: var(--bg);
 }
 
 .ghost-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  /* Target sentuh minimum 44px (kios layar sentuh) */
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--fg-dim);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color 160ms ease, border-color 160ms ease, transform 120ms ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	/* Target sentuh minimum 44px (kios layar sentuh) */
+	min-height: 44px;
+	padding: 0 16px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--fg-dim);
+	font-size: 0.66rem;
+	font-weight: 700;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition:
+		color 160ms ease,
+		border-color 160ms ease,
+		transform 120ms ease;
 }
 
 .ghost-cta:hover {
-  color: var(--fg);
-  border-color: var(--hairline);
+	color: var(--fg);
+	border-color: var(--hairline);
 }
 
 .ghost-cta:active {
-  transform: scale(0.97);
+	transform: scale(0.97);
 }
 
 .ghost-cta:focus-visible {
-  outline: 2.5px solid var(--focus);
-  outline-offset: 3px;
+	outline: 2.5px solid var(--focus);
+	outline-offset: 3px;
 }
 
 /* Kapsul berinversi — nilai dikembalikan ke hover, seperti ambil-cta */
 .capsule-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex: 1 1 0;
-  max-width: 340px;
-  min-height: 44px;
-  padding: 0 26px;
-  border: none;
-  border-radius: 999px;
-  background: var(--fg);
-  color: var(--bg);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background-color 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 160ms ease;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	flex: 1 1 0;
+	max-width: 340px;
+	min-height: 44px;
+	padding: 0 26px;
+	border: none;
+	border-radius: 999px;
+	background: var(--fg);
+	color: var(--bg);
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition:
+		background-color 200ms ease,
+		color 200ms ease,
+		box-shadow 200ms ease,
+		transform 160ms ease;
 }
 
 .capsule-cta:hover {
-  background: transparent;
-  color: var(--fg);
-  box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 5px var(--halo-h);
-  transform: translateY(-2px);
+	background: transparent;
+	color: var(--fg);
+	box-shadow:
+		inset 0 0 0 2px var(--fg),
+		0 0 0 5px var(--halo-h);
+	transform: translateY(-2px);
 }
 
 .capsule-cta:active {
-  transform: translateY(0) scale(0.98);
+	transform: translateY(0) scale(0.98);
 }
 
 .capsule-cta:focus-visible {
-  outline: 2.5px solid var(--focus);
-  outline-offset: 4px;
+	outline: 2.5px solid var(--focus);
+	outline-offset: 4px;
 }
 
 .capsule-cta svg {
-  flex-shrink: 0;
+	flex-shrink: 0;
 }
 
 /* ── Ponsel: aksi mengalir dua baris, CTA tetap menonjol ── */
 @media (max-width: 480px) {
-  .review-actions {
-    gap: 8px;
-  }
-  .capsule-cta {
-    flex-basis: 100%;
-    max-width: none;
-    order: -1;
-  }
-  .ghost-cta {
-    flex: 1;
-  }
+	.review-actions {
+		gap: 8px;
+	}
+	.capsule-cta {
+		flex-basis: 100%;
+		max-width: none;
+		order: -1;
+	}
+	.ghost-cta {
+		flex: 1;
+	}
 }

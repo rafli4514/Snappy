@@ -48,7 +48,7 @@ export async function saveGallerySession({
 	photos,
 	stripDataUrl,
 	templateKey,
-	gifDataUrl = null,
+	gifDataUrl = null
 }: SaveGallerySessionInput): Promise<string> {
 	const finalId = id || generateId();
 	const sess: GallerySession = {
@@ -57,7 +57,7 @@ export async function saveGallerySession({
 		photos: (photos || []).filter(Boolean),
 		stripDataUrl: stripDataUrl || '',
 		templateKey: typeof templateKey === 'string' ? templateKey : 'custom',
-		gifDataUrl: gifDataUrl || null,
+		gifDataUrl: gifDataUrl || null
 	};
 
 	// 1. Save to server API
@@ -65,7 +65,7 @@ export async function saveGallerySession({
 		const res = await fetch('/api/gallery', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(sess),
+			body: JSON.stringify(sess)
 		});
 		if (!res.ok) {
 			console.warn('Server gallery API returned status:', res.status);
@@ -145,8 +145,8 @@ export async function buildQRCodeDataUrl(galleryUrl: string, size = 300): Promis
 			errorCorrectionLevel: 'M',
 			color: {
 				dark: '#1C1917',
-				light: '#FFFFFF',
-			},
+				light: '#FFFFFF'
+			}
 		});
 	} catch (err: unknown) {
 		console.warn('QRCode.toDataURL failed, attempting SVG fallback:', err);
@@ -273,11 +273,15 @@ async function drawToCanvas(url: string, w: number, h: number): Promise<ImageDat
 	const dstAspect = w / h;
 	let sw, sh, sx, sy;
 	if (srcAspect > dstAspect) {
-		sh = img.naturalHeight; sw = sh * dstAspect;
-		sx = (img.naturalWidth - sw) / 2; sy = 0;
+		sh = img.naturalHeight;
+		sw = sh * dstAspect;
+		sx = (img.naturalWidth - sw) / 2;
+		sy = 0;
 	} else {
-		sw = img.naturalWidth; sh = sw / dstAspect;
-		sx = 0; sy = (img.naturalHeight - sh) / 2;
+		sw = img.naturalWidth;
+		sh = sw / dstAspect;
+		sx = 0;
+		sy = (img.naturalHeight - sh) / 2;
 	}
 	ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
 	return ctx.getImageData(0, 0, w, h);

@@ -8,7 +8,8 @@
 	// Token daisyUI (bg-base-100, btn-primary, dst.) mengikuti data-theme di
 	// <html> — satu sumber di sini agar semua layar ikut tema kios.
 	$effect(() => {
-		document.documentElement.dataset.theme = $session.theme === 'dark' ? 'distudio-dark' : 'distudio-light';
+		document.documentElement.dataset.theme =
+			$session.theme === 'dark' ? 'distudio-dark' : 'distudio-light';
 	});
 </script>
 

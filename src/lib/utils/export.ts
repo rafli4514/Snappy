@@ -16,28 +16,25 @@ export async function downloadStripPNG(
 	const canvas = await renderExportCanvas(photoDataUrls, templateKey, options);
 
 	return new Promise((resolve, reject) => {
-		canvas.toBlob(
-			(blob) => {
-				if (!blob) {
-					reject(new Error('Failed to generate PNG blob'));
-					return;
-				}
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				const timestamp = new Date()
-					.toISOString()
-					.replace(/[:\-T]/g, '')
-					.slice(0, 15);
-				a.href = url;
-				a.download = `distudio-strip-${timestamp}.png`;
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				URL.revokeObjectURL(url);
-				resolve();
-			},
-			'image/png'
-		);
+		canvas.toBlob((blob) => {
+			if (!blob) {
+				reject(new Error('Failed to generate PNG blob'));
+				return;
+			}
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			const timestamp = new Date()
+				.toISOString()
+				.replace(/[:\-T]/g, '')
+				.slice(0, 15);
+			a.href = url;
+			a.download = `distudio-strip-${timestamp}.png`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+			resolve();
+		}, 'image/png');
 	});
 }
 

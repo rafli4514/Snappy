@@ -7,7 +7,15 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { goto } from '$app/navigation';
-import type { CameraSettings, CustomTemplate, KioskTheme, Screen, SessionState } from '#lib/types';
+import type {
+	CameraSettings,
+	CustomTemplate,
+	KioskTheme,
+	PhotoTransform,
+	Screen,
+	SessionState,
+	StickerLayer
+} from '#lib/types';
 
 /** Theme persistence key: the kios choice survives page reloads via localStorage */
 const THEME_KEY = 'distudio-theme';
@@ -18,7 +26,7 @@ const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
 	timer: 0,
 	flash: 'off',
 	filter: 'none',
-	grid: 'none',
+	grid: 'none'
 };
 
 function initialCameraSettings(): CameraSettings {
@@ -26,7 +34,9 @@ function initialCameraSettings(): CameraSettings {
 	try {
 		const saved = localStorage.getItem(CAMERA_SETTINGS_KEY);
 		if (saved) return { ...DEFAULT_CAMERA_SETTINGS, ...JSON.parse(saved) };
-	} catch { /* proceed with defaults */ }
+	} catch {
+		/* proceed with defaults */
+	}
 	return { ...DEFAULT_CAMERA_SETTINGS };
 }
 
@@ -54,6 +64,9 @@ export const session = writable<SessionState>({
 	customTemplateData: null,
 	theme: initialTheme(),
 	cameraSettings: initialCameraSettings(),
+	photoTransforms: [],
+	stickers: [],
+	photoFilter: 'none'
 });
 
 /** Derived: is a photo set complete? */
@@ -71,7 +84,8 @@ const SCREEN_PATH: Record<Screen, string> = {
 	camera: '/camera',
 	review: '/review',
 	editor: '/editor',
-	print: '/print',
+	edit: '/edit',
+	print: '/print'
 };
 
 /** Set the kios theme ('dark' | 'light'); persisted for the next kiosk boot */
@@ -91,7 +105,11 @@ export function setCameraSettings(partial: Partial<CameraSettings>): void {
 	session.update((s) => {
 		const cameraSettings = { ...s.cameraSettings, ...partial };
 		if (typeof window !== 'undefined') {
-			try { localStorage.setItem(CAMERA_SETTINGS_KEY, JSON.stringify(cameraSettings)); } catch { /* storage unavailable */ }
+			try {
+				localStorage.setItem(CAMERA_SETTINGS_KEY, JSON.stringify(cameraSettings));
+			} catch {
+				/* storage unavailable */
+			}
 		}
 		return { ...s, cameraSettings };
 	});
@@ -117,7 +135,7 @@ export function beginCapture(): void {
 		isCapturing: true,
 		captureProgress: 0,
 		cameraError: null,
-		screen: 'camera',
+		screen: 'camera'
 	}));
 	void goto(SCREEN_PATH.camera);
 }
@@ -134,7 +152,7 @@ export function addPhoto(dataUrl: string): void {
 		return {
 			...s,
 			photos,
-			captureProgress: s.retakeIndex !== null ? s.captureProgress : photos.length,
+			captureProgress: s.retakeIndex !== null ? s.captureProgress : photos.length
 		};
 	});
 }
@@ -181,14 +199,14 @@ export function finishCapture(): void {
 		...s,
 		isCapturing: false,
 		retakeIndex: null,
-		screen: 'review',
+		screen: 'review'
 	}));
 	void goto(SCREEN_PATH.review);
 }
 
-/** Set selected strip template key */
-export function setTemplate(key: string): void {
-	session.update((s) => ({ ...s, selectedTemplate: key }));
+/** Pilih preset kertas bawaan; template custom yang aktif ikut dilepas */
+export function selectBuiltinTemplate(key: string): void {
+	session.update((s) => ({ ...s, selectedTemplate: key, customTemplateData: null }));
 }
 
 /** Update caption text */
@@ -207,12 +225,46 @@ export function setPhotoCount(count: number): void {
 	session.update((s) => ({ ...s, photoCount: safe }));
 }
 
+/** Set per-photo edit transform (rotation / flip / zoom) — edit screen */
+export function updatePhotoTransform(index: number, transform: PhotoTransform | null): void {
+	session.update((s) => {
+		const photoTransforms = [...(s.photoTransforms || [])];
+		while (photoTransforms.length < (s.photos || []).length) photoTransforms.push(null);
+		const i = Math.min(index, photoTransforms.length - 1);
+		photoTransforms[i] = transform;
+		return { ...s, photoTransforms };
+	});
+}
+
+/** Add a sticker layer onto the strip (edit screen) */
+export function addSticker(layer: StickerLayer): void {
+	session.update((s) => ({ ...s, stickers: [...(s.stickers || []), layer] }));
+}
+
+/** Move a sticker layer (drag-geser di preview edit screen) */
+export function moveSticker(id: string, x: number, y: number): void {
+	session.update((s) => ({
+		...s,
+		stickers: (s.stickers || []).map((l) => (l.id === id ? { ...l, x, y } : l))
+	}));
+}
+
+/** Remove a sticker layer (edit screen) */
+export function removeSticker(id: string): void {
+	session.update((s) => ({ ...s, stickers: (s.stickers || []).filter((l) => l.id !== id) }));
+}
+
+/** Set the strip color filter key (edit screen) */
+export function setPhotoFilter(filter: string | null): void {
+	session.update((s) => ({ ...s, photoFilter: filter }));
+}
+
 /** Set active custom template object */
 export function setCustomTemplate(template: CustomTemplate | null): void {
 	session.update((s) => ({
 		...s,
 		selectedTemplate: template ? template.id : 'classic',
-		customTemplateData: template || null,
+		customTemplateData: template || null
 	}));
 }
 
@@ -230,8 +282,8 @@ export function updateSlotAssignment(slotId: string, photoIndex: number | null):
 			...s,
 			customTemplateData: {
 				...s.customTemplateData,
-				slots,
-			},
+				slots
+			}
 		};
 	});
 }
@@ -255,7 +307,7 @@ export function updateSlotTransform(
 					...slot,
 					scale: scale !== undefined ? scale : slot.scale,
 					offsetX: offsetX !== undefined ? offsetX : slot.offsetX,
-					offsetY: offsetY !== undefined ? offsetY : slot.offsetY,
+					offsetY: offsetY !== undefined ? offsetY : slot.offsetY
 				};
 			}
 			return slot;
@@ -264,8 +316,8 @@ export function updateSlotTransform(
 			...s,
 			customTemplateData: {
 				...s.customTemplateData,
-				slots,
-			},
+				slots
+			}
 		};
 	});
 }
@@ -288,6 +340,9 @@ export function resetSession(): void {
 		customTemplateData: null,
 		theme: currentTheme || 'light',
 		cameraSettings: currentCameraSettings || { ...DEFAULT_CAMERA_SETTINGS },
+		photoTransforms: [],
+		stickers: [],
+		photoFilter: 'none'
 	});
 	void goto(SCREEN_PATH.start);
 }

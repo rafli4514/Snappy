@@ -33,7 +33,7 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
       <rect x="50" y="20" width="250" height="60" rx="6" fill="#EF4444"/>
       <rect x="56" y="26" width="238" height="48" rx="4" fill="none" stroke="#FEF08A" stroke-width="2" stroke-dasharray="6 4"/>
       <text x="175" y="58" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="900" fill="#FEF08A" text-anchor="middle" letter-spacing="4">★ VIP GUEST ★</text>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'stamp-airmail',
@@ -56,7 +56,7 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
       <line x1="45" y1="90" x2="155" y2="90" stroke="#1D4ED8" stroke-width="2"/>
       <text x="100" y="108" font-family="'Inter', sans-serif" font-size="18" font-weight="800" fill="#DC2626" text-anchor="middle">VERIFIED</text>
       <line x1="45" y1="115" x2="155" y2="115" stroke="#1D4ED8" stroke-width="2"/>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'badge-starburst',
@@ -69,7 +69,7 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
       <polygon points="80,10 97,55 145,55 106,85 122,130 80,102 38,130 54,85 15,55 63,55" fill="#FBBF24" stroke="#D97706" stroke-width="4"/>
       <circle cx="80" cy="80" r="32" fill="#FEF3C7"/>
       <text x="80" y="85" font-family="'Inter', sans-serif" font-size="14" font-weight="900" fill="#92400E" text-anchor="middle">BEST</text>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'sticker-heart',
@@ -83,13 +83,13 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
       <path d="M120 40 C105 25 80 40 80 65 C80 95 120 120 120 120 C120 120 160 95 160 65 C160 40 135 25 120 40 Z" fill="#F43F5E" stroke="#BE123C" stroke-width="4"/>
       <circle cx="45" cy="45" r="8" fill="#FFFFFF" opacity="0.6"/>
       <circle cx="105" cy="55" r="7" fill="#FFFFFF" opacity="0.6"/>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'sticker-sparkles',
 		name: 'Sparkle Cluster',
 		type: 'sticker',
-		width: 0.30,
+		width: 0.3,
 		height: 0.08,
 		aspectRatio: 1.3,
 		svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" width="160" height="120">
@@ -99,7 +99,7 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
       <path d="M115 40 Q115 65 90 65 Q115 65 115 90 Q115 65 140 65 Q115 65 115 40 Z" fill="#FBBF24"/>
       <!-- Tiny star -->
       <path d="M135 15 Q135 25 125 25 Q135 25 135 35 Q135 25 145 25 Q135 25 135 15 Z" fill="#FCD34D"/>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'badge-party',
@@ -111,8 +111,8 @@ export const BUILTIN_STICKERS: BuiltinSticker[] = [
 		svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" width="300" height="100">
       <rect x="10" y="15" width="280" height="70" rx="35" fill="#8B5CF6" stroke="#EDE9FE" stroke-width="4"/>
       <text x="150" y="58" font-family="'Inter', sans-serif" font-size="22" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">🎉 PARTY TIME!</text>
-    </svg>`,
-	},
+    </svg>`
+	}
 ];
 
 export const SAMPLE_TEMPLATES: CustomTemplate[] = [
@@ -142,7 +142,7 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				locked: false,
 				hidden: false,
 				aspectRatioLocked: true,
-				aspectRatio: 3.5,
+				aspectRatio: 3.5
 			},
 			{
 				id: 'ovl-2',
@@ -159,8 +159,8 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				locked: false,
 				hidden: false,
 				aspectRatioLocked: true,
-				aspectRatio: 1.3,
-			},
+				aspectRatio: 1.3
+			}
 		],
 		slots: [
 			{
@@ -175,12 +175,12 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 					{ x: 0.08, y: 0.08 },
 					{ x: 0.92, y: 0.11 },
 					{ x: 0.92, y: 0.35 },
-					{ x: 0.08, y: 0.32 },
+					{ x: 0.08, y: 0.32 }
 				],
 				assignedPhotoIndex: 0,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
+				offsetY: 0
 			},
 			{
 				id: 'slot-2',
@@ -191,37 +191,37 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				width: 0.84,
 				height: 0.28,
 				points: [
-					{ x: 0.50, y: 0.37 },
+					{ x: 0.5, y: 0.37 },
 					{ x: 0.92, y: 0.44 },
-					{ x: 0.92, y: 0.60 },
-					{ x: 0.50, y: 0.67 },
-					{ x: 0.08, y: 0.60 },
-					{ x: 0.08, y: 0.44 },
+					{ x: 0.92, y: 0.6 },
+					{ x: 0.5, y: 0.67 },
+					{ x: 0.08, y: 0.6 },
+					{ x: 0.08, y: 0.44 }
 				],
 				assignedPhotoIndex: 1,
 				scale: 1.1,
 				offsetX: 0,
-				offsetY: 0,
+				offsetY: 0
 			},
 			{
 				id: 'slot-3',
 				name: 'Bottom Angled Frame',
 				type: 'polygon',
 				x: 0.08,
-				y: 0.70,
+				y: 0.7,
 				width: 0.84,
 				height: 0.24,
 				points: [
-					{ x: 0.08, y: 0.70 },
+					{ x: 0.08, y: 0.7 },
 					{ x: 0.92, y: 0.67 },
 					{ x: 0.92, y: 0.93 },
-					{ x: 0.08, y: 0.96 },
+					{ x: 0.08, y: 0.96 }
 				],
 				assignedPhotoIndex: 2,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
-			},
+				offsetY: 0
+			}
 		],
 		// Clean SVG border overlay with stylish brand typography and cut guide
 		artworkDataUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 1800" width="600" height="1800">
@@ -242,7 +242,7 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
       <polygon points="48,1260 552,1206 552,1674 48,1728" class="poly-border"/>
       <!-- Bottom tag -->
       <text x="300" y="1770" class="sub" text-anchor="middle">LIMITED EDITION ARCHIVE</text>
-    </svg>`,
+    </svg>`
 	},
 	{
 		id: 'sample-asymmetric-duo',
@@ -267,7 +267,7 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				assignedPhotoIndex: 0,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
+				offsetY: 0
 			},
 			{
 				id: 'slot-2',
@@ -275,13 +275,13 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				type: 'rect',
 				x: 0.08,
 				y: 0.42,
-				width: 0.40,
+				width: 0.4,
 				height: 0.24,
 				borderRadius: 6,
 				assignedPhotoIndex: 1,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
+				offsetY: 0
 			},
 			{
 				id: 'slot-3',
@@ -289,13 +289,13 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				type: 'rect',
 				x: 0.52,
 				y: 0.42,
-				width: 0.40,
+				width: 0.4,
 				height: 0.24,
 				borderRadius: 6,
 				assignedPhotoIndex: 2,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
+				offsetY: 0
 			},
 			{
 				id: 'slot-4',
@@ -309,8 +309,8 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
 				assignedPhotoIndex: 3,
 				scale: 1.0,
 				offsetX: 0,
-				offsetY: 0,
-			},
+				offsetY: 0
+			}
 		],
 		artworkDataUrl: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 1800" width="600" height="1800">
       <defs>
@@ -325,8 +325,8 @@ export const SAMPLE_TEMPLATES: CustomTemplate[] = [
       <rect x="312" y="756" width="240" height="432" rx="6" class="frame-line"/>
       <rect x="48" y="1224" width="504" height="468" rx="8" class="frame-line"/>
       <text x="300" y="1740" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="%23A1A1AA" text-anchor="middle">COLLECTOR STRIP</text>
-    </svg>`,
-	},
+    </svg>`
+	}
 ];
 
 /** Open or initialize the IndexedDB */
@@ -438,7 +438,7 @@ export async function saveCustomTemplate(template: CustomTemplate): Promise<Cust
 			name: s.name || `Slot ${idx + 1}`,
 			scale: s.scale ?? 1.0,
 			offsetX: s.offsetX ?? 0,
-			offsetY: s.offsetY ?? 0,
+			offsetY: s.offsetY ?? 0
 		})),
 		overlays: (template.overlays || []).map((o, idx) => ({
 			...o,
@@ -449,8 +449,8 @@ export async function saveCustomTemplate(template: CustomTemplate): Promise<Cust
 			zIndex: o.zIndex ?? idx,
 			locked: o.locked ?? false,
 			hidden: o.hidden ?? false,
-			aspectRatioLocked: o.aspectRatioLocked ?? true,
-		})),
+			aspectRatioLocked: o.aspectRatioLocked ?? true
+		}))
 	};
 
 	const db = await openDB();
@@ -507,7 +507,7 @@ export async function duplicateCustomTemplate(id: string): Promise<CustomTemplat
 		id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
 		name: `${original.name} (Copy)`,
 		createdAt: Date.now(),
-		updatedAt: Date.now(),
+		updatedAt: Date.now()
 	};
 
 	return await saveCustomTemplate(copy);
@@ -521,8 +521,8 @@ export function exportTemplateFile(template: CustomTemplate): void {
 		exportedAt: new Date().toISOString(),
 		template: {
 			...template,
-			id: undefined, // allow new ID upon import
-		},
+			id: undefined // allow new ID upon import
+		}
 	};
 
 	const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -546,7 +546,9 @@ export async function importTemplateFile(fileOrJson: File | string): Promise<Cus
 		content = await fileOrJson.text();
 	}
 
-	const data = JSON.parse(content) as { template?: Partial<CustomTemplate> } & Partial<CustomTemplate>;
+	const data = JSON.parse(content) as {
+		template?: Partial<CustomTemplate>;
+	} & Partial<CustomTemplate>;
 	const tmpl = (data.template || data) as CustomTemplate;
 
 	if (!tmpl.name || !Array.isArray(tmpl.slots)) {
@@ -558,7 +560,7 @@ export async function importTemplateFile(fileOrJson: File | string): Promise<Cus
 		id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
 		name: tmpl.name.includes('(Imported)') ? tmpl.name : `${tmpl.name} (Imported)`,
 		createdAt: Date.now(),
-		updatedAt: Date.now(),
+		updatedAt: Date.now()
 	};
 
 	return await saveCustomTemplate(newTemplate);

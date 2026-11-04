@@ -7,11 +7,11 @@
 
 ## 1. Framework and Libraries
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| SvelteKit | latest | Application framework + routing |
-| Vite | (bundled with SvelteKit) | Dev server and bundler |
-| Lucide Svelte | latest | Icon library |
+| Package       | Version                  | Purpose                         |
+| ------------- | ------------------------ | ------------------------------- |
+| SvelteKit     | latest                   | Application framework + routing |
+| Vite          | (bundled with SvelteKit) | Dev server and bundler          |
+| Lucide Svelte | latest                   | Icon library                    |
 
 No backend. No external image services. No database.
 
@@ -106,6 +106,7 @@ Session end / screen exit:
 ```
 
 **Key rules:**
+
 - Camera is started only on user intent (FR-001).
 - Camera is stopped as soon as the session is complete (FR-008).
 - `beforeunload` event stops tracks as a safety net.
@@ -140,6 +141,7 @@ Live Video Frame
 ```
 
 ### renderStrip() Responsibilities
+
 1. Fill background with template color.
 2. For each photo slot: crop-scale-center the source image onto the slot rectangle.
 3. Draw frame borders.
@@ -160,24 +162,24 @@ Export canvas dimensions: **1200 × 1800 px** (4R, both strips).
 
 ```js
 function drawCroppedImage(ctx, img, dx, dy, dw, dh) {
-  const srcAspect = img.width / img.height;
-  const dstAspect = dw / dh;
-  let sx, sy, sw, sh;
+	const srcAspect = img.width / img.height;
+	const dstAspect = dw / dh;
+	let sx, sy, sw, sh;
 
-  if (srcAspect > dstAspect) {
-    // Source is wider — crop sides
-    sh = img.height;
-    sw = sh * dstAspect;
-    sx = (img.width - sw) / 2;
-    sy = 0;
-  } else {
-    // Source is taller — crop top/bottom
-    sw = img.width;
-    sh = sw / dstAspect;
-    sx = 0;
-    sy = (img.height - sh) / 2;
-  }
-  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+	if (srcAspect > dstAspect) {
+		// Source is wider — crop sides
+		sh = img.height;
+		sw = sh * dstAspect;
+		sx = (img.width - sw) / 2;
+		sy = 0;
+	} else {
+		// Source is taller — crop top/bottom
+		sw = img.width;
+		sh = sw / dstAspect;
+		sx = 0;
+		sy = (img.height - sh) / 2;
+	}
+	ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 ```
 
@@ -205,14 +207,14 @@ Print CSS hides all other content and sets `@page { size: 4in 6in; margin: 0; }`
 
 ## 9. Error Handling
 
-| Error | Source | Recovery |
-|-------|--------|----------|
-| `NotAllowedError` | getUserMedia | Show permission error screen |
-| `NotFoundError` | getUserMedia | Show no-camera screen |
-| `NotReadableError` | getUserMedia | Show camera-busy screen |
-| Track ended mid-session | MediaStreamTrack | Stop session, show error |
-| Canvas render failure | canvas.js | Catch and set error state |
-| Download failure | export.js | Show error message |
+| Error                   | Source           | Recovery                     |
+| ----------------------- | ---------------- | ---------------------------- |
+| `NotAllowedError`       | getUserMedia     | Show permission error screen |
+| `NotFoundError`         | getUserMedia     | Show no-camera screen        |
+| `NotReadableError`      | getUserMedia     | Show camera-busy screen      |
+| Track ended mid-session | MediaStreamTrack | Stop session, show error     |
+| Canvas render failure   | canvas.js        | Catch and set error state    |
+| Download failure        | export.js        | Show error message           |
 
 ---
 
@@ -228,14 +230,14 @@ Print CSS hides all other content and sets `@page { size: 4in 6in; margin: 0; }`
 
 ## 11. Key Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| SvelteKit over plain Svelte | File-based routing, SSR for initial load performance |
-| Svelte stores over Zustand/Pinia | Built-in, no extra dependency |
-| Canvas API over CSS grid for strip | Exact pixel control needed for print output |
-| PNG over JPEG for export | Lossless; no quality degradation from canvas.toDataURL |
-| Browser print dialog over custom PDF | No backend required; sufficient for MVP |
-| DataURLs over Blob URLs | Simplicity; blobs require explicit revocation management |
+| Decision                             | Rationale                                                |
+| ------------------------------------ | -------------------------------------------------------- |
+| SvelteKit over plain Svelte          | File-based routing, SSR for initial load performance     |
+| Svelte stores over Zustand/Pinia     | Built-in, no extra dependency                            |
+| Canvas API over CSS grid for strip   | Exact pixel control needed for print output              |
+| PNG over JPEG for export             | Lossless; no quality degradation from canvas.toDataURL   |
+| Browser print dialog over custom PDF | No backend required; sufficient for MVP                  |
+| DataURLs over Blob URLs              | Simplicity; blobs require explicit revocation management |
 
 ---
 
@@ -245,33 +247,33 @@ Print CSS hides all other content and sets `@page { size: 4in 6in; margin: 0; }`
 
 ```typescript
 interface CustomSlot {
-  id: string;
-  name: string;
-  type: 'rect' | 'polygon' | 'circle';
-  x: number;               // Normalized [0..1]
-  y: number;               // Normalized [0..1]
-  width: number;           // Normalized [0..1]
-  height: number;          // Normalized [0..1]
-  borderRadius?: number;   // Corner radius in px
-  points?: Array<{ x: number; y: number }>; // Normalized points for polygon clipping
-  assignedPhotoIndex: number | null;        // Mapped index into session.photos[]
-  scale: number;           // Zoom factor (default 1.0)
-  offsetX: number;         // Pan X (-0.5 .. 0.5)
-  offsetY: number;         // Pan Y (-0.5 .. 0.5)
+	id: string;
+	name: string;
+	type: 'rect' | 'polygon' | 'circle';
+	x: number; // Normalized [0..1]
+	y: number; // Normalized [0..1]
+	width: number; // Normalized [0..1]
+	height: number; // Normalized [0..1]
+	borderRadius?: number; // Corner radius in px
+	points?: Array<{ x: number; y: number }>; // Normalized points for polygon clipping
+	assignedPhotoIndex: number | null; // Mapped index into session.photos[]
+	scale: number; // Zoom factor (default 1.0)
+	offsetX: number; // Pan X (-0.5 .. 0.5)
+	offsetY: number; // Pan Y (-0.5 .. 0.5)
 }
 
 interface CustomTemplate {
-  id: string;
-  name: string;
-  isCustom: true;
-  backgroundColor: string;
-  artworkLayer: 'overlay' | 'underlay';
-  artworkDataUrl?: string; // PNG or SVG data URL
-  width: 600;
-  height: 1800;
-  slots: CustomSlot[];
-  createdAt: number;
-  updatedAt: number;
+	id: string;
+	name: string;
+	isCustom: true;
+	backgroundColor: string;
+	artworkLayer: 'overlay' | 'underlay';
+	artworkDataUrl?: string; // PNG or SVG data URL
+	width: 600;
+	height: 1800;
+	slots: CustomSlot[];
+	createdAt: number;
+	updatedAt: number;
 }
 ```
 
@@ -311,4 +313,3 @@ For each CustomSlot:
             ▼
 Duplicate on 4R Export Canvas (Left: X=6, Right: X=606, Cut: X=600)
 ```
-

@@ -8,7 +8,8 @@
 	// review — arahkan ke review, jangan biarkan menimpa hasil.
 	// Pengecualian: retake satu foto (retakeIndex terisi) memang masuk kamera.
 	onMount(() => {
-		if ($isPhotoSetComplete && $session.retakeIndex === null) void goto('/review', { replace: true });
+		if ($isPhotoSetComplete && $session.retakeIndex === null)
+			void goto('/review', { replace: true });
 	});
 </script>
 

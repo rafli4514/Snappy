@@ -20,12 +20,7 @@ declare module 'gifenc' {
 	}
 
 	export interface GIFEncoderInstance {
-		writeFrame(
-			index: Uint8Array,
-			width: number,
-			height: number,
-			options?: WriteFrameOptions
-		): void;
+		writeFrame(index: Uint8Array, width: number, height: number, options?: WriteFrameOptions): void;
 		writeFrame(index: number[], width: number, height: number, options?: WriteFrameOptions): void;
 		finish(): void;
 		bytes(): Uint8Array;
@@ -38,7 +33,11 @@ declare module 'gifenc' {
 	export function quantize(
 		data: Uint8ClampedArray | number[] | ArrayLike<number>,
 		maxColors: number,
-		options?: { format?: 'rgb565' | 'rgb444' | 'rgba4444'; oneBitAlpha?: boolean; clearAlpha?: boolean }
+		options?: {
+			format?: 'rgb565' | 'rgb444' | 'rgba4444';
+			oneBitAlpha?: boolean;
+			clearAlpha?: boolean;
+		}
 	): Palette;
 
 	export function applyPalette(
