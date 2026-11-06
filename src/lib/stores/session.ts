@@ -7,6 +7,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { goto } from '$app/navigation';
+import { DEFAULT_FORMAT_ID, formatById } from '#lib/data/standardFormats';
 import type {
 	CameraSettings,
 	CustomTemplate,
@@ -61,7 +62,8 @@ export const session = writable<SessionState>({
 	cameraError: null,
 	isCapturing: false,
 	captureProgress: 0,
-	photoCount: 4, // jumlah slot strip (1–6)
+	photoCount: 4, // jumlah foto strip aktif (dibatasi rentang format)
+	formatId: DEFAULT_FORMAT_ID,
 	activeFrame: null,
 	selectedPhotoIndices: [],
 	customTemplateData: null,
@@ -270,14 +272,35 @@ export function toggleDate(): void {
 	session.update((s) => ({ ...s, showDate: !s.showDate }));
 }
 
-/** Set photo count (1–6) — ranges outside are guarded */
+/** Pilih format standard; jumlah foto menyesuaikan default format. */
+export function setFormat(formatId: string): void {
+	session.update((s) => {
+		const format = formatById(formatId);
+		const photoCount = format.photos.includes(s.photoCount) ? s.photoCount : format.defaultCount;
+		return {
+			...s,
+			formatId: format.id,
+			photoCount,
+			selectedPhotoIndices: []
+		};
+	});
+}
+
+/** Set photo count — dibatasi rentang jumlah foto format yang dipilih. */
 export function setPhotoCount(count: number): void {
-	const safe = Math.min(6, Math.max(1, Math.round(count)));
-	session.update((s) => ({
-		...s,
-		photoCount: safe,
-		selectedPhotoIndices: s.selectedPhotoIndices.slice(0, safe)
-	}));
+	session.update((s) => {
+		const format = formatById(s.formatId);
+		const allowed = format.photos;
+		const clamped = Math.min(Math.max(Math.round(count), allowed[0]), allowed[allowed.length - 1]);
+		const safe = allowed.includes(clamped)
+			? clamped
+			: allowed.reduce((a, b) => (Math.abs(b - clamped) < Math.abs(a - clamped) ? b : a));
+		return {
+			...s,
+			photoCount: safe,
+			selectedPhotoIndices: s.selectedPhotoIndices.slice(0, safe)
+		};
+	});
 }
 
 /** Pilih N index foto dengan jarak merata (0, 3, 6, 9 untuk 4 dari 10). */
@@ -445,6 +468,7 @@ export function resetSession(): void {
 		isCapturing: false,
 		captureProgress: 0,
 		photoCount: 4,
+		formatId: DEFAULT_FORMAT_ID,
 		activeFrame: null,
 		selectedPhotoIndices: [],
 		customTemplateData: null,

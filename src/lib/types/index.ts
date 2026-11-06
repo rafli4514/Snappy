@@ -41,8 +41,10 @@ export interface SessionState {
 	cameraError: string | null;
 	isCapturing: boolean;
 	captureProgress: number;
-	/** Foto yang dipakai strip (= jumlah slot frame aktif, 1–6). */
+	/** Foto yang dipakai strip (= jumlah slot frame aktif). */
 	photoCount: number;
+	/** Format standard yang dipilih tamu (mis. '2x6'). */
+	formatId: string;
 	/** Frame unggahan yang aktif; null = pakai template klasik. */
 	activeFrame: PhotoFrame | null;
 	/** Index foto yang dipakai (urut kronologis = urutan strip). Panjang = photoCount. */
@@ -77,6 +79,10 @@ export interface PhotoFrame {
 	/** Titik fokus crop default untuk slot portrait. */
 	focal: 'center' | 'top';
 	source: 'upload' | 'seed';
+	/** Kategori format standard (mis. '2x6'); null = frame kustom (Frame Studio). */
+	formatId?: string | null;
+	/** Nonaktif = tidak tampil di kios (toggle admin). */
+	enabled?: boolean;
 	createdAt: number;
 	updatedAt: number;
 }
@@ -233,6 +239,7 @@ export interface ProductRow {
 
 /** One photo-count product: true print size at 300 DPI, slot rows, paper copy count. */
 export interface ProductSpec {
+	/** Judul bawaan footer; footnote jumlah tiap strip. */
 	nama: string;
 	cm: string;
 	pxW: number;
@@ -244,6 +251,8 @@ export interface ProductSpec {
 	copySheet: 1 | 2;
 	sheetOrient: 'portrait' | 'landscape';
 	rows: ProductRow[];
+	/** Garis potong putus-putus; hanya 2-strip side by side (4R Double). */
+	cutLine?: 'vertical';
 }
 
 /** Photo count (1–6) → product. Unknown counts are guarded at read sites. */
