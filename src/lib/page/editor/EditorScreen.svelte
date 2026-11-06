@@ -7,15 +7,17 @@
 		selectBuiltinTemplate,
 		swapPhotos,
 		movePhoto,
-		stripPhotos
+		stripPhotos,
+		setActiveFrame
 	} from '#lib/stores/session';
 	import { PRODUK, TEMPLATES, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
-	import { frameToTemplate } from '#lib/utils/frameStorage';
+	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
 	import TemplateThumb from '#lib/features/editor/TemplateThumb.svelte';
 	import CustomTemplateBuilder from '#lib/features/editor/CustomTemplateBuilder.svelte';
 	import TemplateLibraryModal from '#lib/features/editor/TemplateLibraryModal.svelte';
 	import { getAllCustomTemplates } from '#lib/utils/customTemplateStorage';
 	import type { CustomTemplate } from '#lib/types';
+	import type { PhotoFrame } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
 
@@ -32,17 +34,22 @@
 		: customTemplateData || $session.selectedTemplate;
 	$: product = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
-	// ── Panel kanan: preset kertas bawaan · template buatan sendiri ──
-	type PanelTab = 'preset' | 'mine';
+	// ── Panel kanan: preset kertas bawaan · template buatan sendiri · frame tersimpan ──
+	type PanelTab = 'preset' | 'mine' | 'frame';
 	let activeTab: PanelTab = 'preset';
 
 	$: presets = Object.values(TEMPLATES).map((t) => ({ key: t.id, label: t.label }));
 
 	let customTemplatesList: CustomTemplate[] = [];
+	let savedFramesList: PhotoFrame[] = [];
 	$: userTemplates = customTemplatesList.map((template) => {
 		const slotCount = (template.slots || []).length;
 		return { template, slotCount, matched: slotCount === photoCount };
 	});
+	$: savedFrames = savedFramesList.map((frame) => ({
+		frame,
+		matched: frame.slotCount === photoCount
+	}));
 
 	function isPresetSelected(key: string): boolean {
 		return !customTemplateData && $session.selectedTemplate === key;
@@ -147,6 +154,7 @@
 
 	onMount(async () => {
 		await refreshCustomTemplates();
+		await refreshSavedFrames();
 		// Pilihan lama bisa menunjuk preset katalog yang sudah dihapus.
 		if (!customTemplateData && !TEMPLATES[$session.selectedTemplate]) {
 			selectBuiltinTemplate('classic');
@@ -162,12 +170,24 @@
 		}
 	}
 
+	async function refreshSavedFrames(): Promise<void> {
+		try {
+			savedFramesList = await listFrames();
+		} catch (e) {
+			console.error('Error refreshing saved frames:', e);
+		}
+	}
+
 	function selectPreset(key: string): void {
 		selectBuiltinTemplate(key);
 	}
 
 	function selectCustom(template: CustomTemplate): void {
 		setCustomTemplate(template);
+	}
+
+	function selectSavedFrame(frame: PhotoFrame): void {
+		setActiveFrame(frame);
 	}
 
 	function togglePanel(): void {
@@ -444,9 +464,9 @@
 						<button
 							type="button"
 							class="create-template-btn font-mono"
-							on:click={() => goTo('strip')}
+							on:click={() => setActiveFrame(null)}
 						>
-							Ganti Frame
+							Lepas Frame
 						</button>
 					</div>
 				{:else}
@@ -475,6 +495,18 @@
 								aria-controls="template-panel"
 							>
 								Template Saya ({userTemplates.length})
+							</button>
+							<button
+								type="button"
+								id="tab-frame"
+								class="category-pill font-mono"
+								class:is-active={activeTab === 'frame'}
+								on:click={() => (activeTab = 'frame')}
+								role="tab"
+								aria-selected={activeTab === 'frame' ? 'true' : 'false'}
+								aria-controls="template-panel"
+							>
+								Frame ({savedFrames.length})
 							</button>
 						</div>
 						<p class="product-note font-mono">
@@ -508,6 +540,40 @@
 									</button>
 								{/each}
 							</div>
+						{:else if activeTab === 'frame'}
+							{#if savedFrames.length === 0}
+								<p class="empty-catalog font-mono">
+									Belum ada frame tersimpan. Buat di Katalog Standard (/admin/standar).
+								</p>
+							{:else}
+								<div class="preset-grid" role="group" aria-label="Frame tersimpan">
+									{#each savedFrames as item (item.frame.id)}
+										<button
+											type="button"
+											class="template-card"
+											class:is-selected={$session.activeFrame?.id === item.frame.id}
+											class:is-locked={!item.matched}
+											on:click={() => selectSavedFrame(item.frame)}
+											disabled={!item.matched}
+											aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
+											aria-label="{item.frame.name}{item.matched
+												? ''
+												: ` — butuh ${item.frame.slotCount} foto`}"
+										>
+											<span class="template-thumb">
+												<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
+												{#if $session.activeFrame?.id === item.frame.id}
+													<span class="selected-mark" aria-hidden="true">✓</span>
+												{/if}
+											</span>
+											<span class="template-name">{item.frame.name}</span>
+											{#if !item.matched}
+												<span class="template-note font-mono">{item.frame.slotCount} foto</span>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							{/if}
 						{:else if userTemplates.length === 0}
 							<p class="empty-catalog font-mono">
 								Belum ada template buatanmu. Template baru mengikuti jumlah foto sesi ini.
@@ -1294,10 +1360,14 @@
 		height: clamp(104px, 19vh, 168px);
 	}
 
+	.template-thumb-img {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+		display: block;
+	}
+
 	.selected-mark {
-		position: absolute;
-		top: -8px;
-		right: -8px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
