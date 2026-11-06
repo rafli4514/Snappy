@@ -10,6 +10,7 @@
 	} from '#lib/stores/session';
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
+	import { formatById } from '#lib/data/standardFormats';
 	import type { PhotoFrame } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -142,6 +143,11 @@
 
 	function selectSavedFrame(frame: PhotoFrame): void {
 		setActiveFrame(frame);
+	}
+
+	function formatOf(frame: PhotoFrame): string {
+		const format = frame.formatId ? formatById(frame.formatId) : null;
+		return format?.label.split('·')[0].trim() ?? 'KUSTOM';
 	}
 
 	function togglePanel(): void {
@@ -385,7 +391,7 @@
 				<div class="panel-head panel-head--frames">
 					<h2 class="panel-title font-display">PILIH TEMPLATE</h2>
 					<p class="product-note font-mono">
-						{product.cm} cm · {photoCount} foto
+						{product.cm} · {photoCount} foto · {formatById($session.formatId).label}
 					</p>
 				</div>
 
@@ -396,9 +402,28 @@
 					aria-labelledby="template-panel-title"
 				>
 					{#if savedFrames.length === 0}
-						<p class="empty-catalog font-mono">
-							Belum ada template terpasang. Admin bisa menambahkannya lewat Frame Studio.
-						</p>
+						<div class="empty-catalog">
+							<div class="empty-catalog-icon" aria-hidden="true">
+								<svg
+									viewBox="0 0 24 24"
+									width="28"
+									height="28"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path
+										d="M4 8h2l1.5-2h9L18 8h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"
+									/>
+									<circle cx="12" cy="13" r="3.5" />
+								</svg>
+							</div>
+							<p class="empty-catalog-title font-display">Belum ada template</p>
+							<p class="empty-catalog-body font-mono">Admin bisa menambahkan lewat Frame Studio.</p>
+							<a class="empty-catalog-link font-mono" href="/admin/frames">Buka Frame Studio</a>
+						</div>
 					{:else}
 						<div class="preset-grid" role="group" aria-label="Template admin">
 							{#each savedFrames as item (item.frame.id)}
@@ -420,7 +445,12 @@
 											<span class="selected-mark" aria-hidden="true">✓</span>
 										{/if}
 									</span>
-									<span class="template-name">{item.frame.name}</span>
+									<span class="template-name">
+										{item.frame.name}
+									</span>
+									<span class="template-badge font-mono">
+										{formatOf(item.frame)}
+									</span>
 									{#if !item.matched}
 										<span class="template-note font-mono">{item.frame.slotCount} foto</span>
 									{/if}
@@ -601,7 +631,7 @@
 	.editor-stage {
 		flex: 1;
 		display: grid;
-		grid-template-columns: 200px 1fr 370px;
+		grid-template-columns: 220px 1fr 420px;
 		height: calc(100vh - 52px);
 		height: calc(100dvh - 52px);
 		overflow: hidden;
@@ -609,7 +639,7 @@
 	}
 
 	.editor-stage.is-collapsed {
-		grid-template-columns: 200px 1fr 0px;
+		grid-template-columns: 220px 1fr 0px;
 	}
 
 	/* ── 1. KOLOM KIRI: Foto Sesi (drag & drop reorder) ── */
@@ -938,6 +968,121 @@
 		font-weight: 650;
 		letter-spacing: 0.02em;
 		color: var(--fg);
+	}
+
+	.template-thumb {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: clamp(140px, 24vh, 220px);
+		border-radius: 8px;
+		overflow: hidden;
+		background: var(--veil-edge);
+	}
+
+	.template-thumb-img {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+		display: block;
+	}
+
+	.selected-mark {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: var(--fg);
+		color: var(--bg);
+		font-size: 0.72rem;
+		font-weight: 800;
+		box-shadow: 0 2px 8px rgba(11, 10, 9, 0.35);
+	}
+
+	.template-name {
+		font-size: 0.72rem;
+		font-weight: 600;
+		line-height: 1.25;
+		text-align: center;
+		color: var(--fg);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		line-clamp: 2;
+		overflow: hidden;
+	}
+
+	.template-badge {
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+		text-align: center;
+		opacity: 0.8;
+	}
+
+	.template-note {
+		font-size: 0.55rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		text-align: center;
+		color: var(--fg-dim);
+	}
+
+	.empty-catalog {
+		margin: 0;
+		text-align: center;
+		font-size: 0.72rem;
+		line-height: 1.6;
+		color: var(--fg-dim);
+		padding: 28px 16px;
+	}
+
+	.empty-catalog-title {
+		margin: 0 0 6px;
+		font-size: 1.05rem;
+		font-weight: 500;
+		color: var(--fg);
+	}
+
+	.empty-catalog-body {
+		margin: 0 0 14px;
+		font-size: 0.62rem;
+		letter-spacing: 0.1em;
+		color: var(--fg-dim);
+	}
+
+	.empty-catalog-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 36px;
+		padding: 0 16px;
+		border: 1px solid var(--hairline);
+		border-radius: 999px;
+		background: transparent;
+		color: var(--fg-dim);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		text-decoration: none;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease;
+	}
+
+	.empty-catalog-link:hover {
+		color: var(--fg);
+		border-color: var(--fg);
 	}
 	/* Bottom Actions SELANJUTNYA button */
 	.templates-footer {
