@@ -4,8 +4,11 @@
 		detectFrameSlots,
 		boxesToSlots,
 		fileToDataUrl,
+		isJpegFile,
 		isPngFile,
 		isSvgFile,
+		isWebpFile,
+		eraseRegions,
 		sanitizeSvg,
 		svgToDataUrl
 	} from '#lib/utils/frameDetect';
@@ -20,12 +23,18 @@
 	import type { DetectedBox } from '#lib/utils/frameDetect';
 	import type { PhotoFrame } from '#lib/types';
 
+	interface SlotCandidate {
+		box: DetectedBox;
+		placeholder: boolean;
+	}
+
 	interface Draft {
 		dataUrl: string;
 		width: number;
 		height: number;
-		boxes: DetectedBox[];
 		sourceName: string;
+		detectedFromDark: boolean;
+		candidates: SlotCandidate[];
 	}
 
 	let frames = $state<PhotoFrame[]>([]);
@@ -36,6 +45,19 @@
 	let draft = $state<Draft | null>(null);
 	let frameName = $state('');
 	let focal = $state<'center' | 'top'>('center');
+
+	/** Nomor placeholder urut atas→bawah; Map dari index kandidat. */
+	const placeholderNumbers = $derived.by(() => {
+		const map = new Map<number, number>();
+		draft?.candidates.forEach((candidate, i) => {
+			if (candidate.placeholder) map.set(i, map.size + 1);
+		});
+		return map;
+	});
+	const placeholderCount = $derived(
+		draft ? draft.candidates.filter((candidate) => candidate.placeholder).length : 0
+	);
+	const transparentCount = $derived(draft ? draft.candidates.length - placeholderCount : 0);
 
 	onMount(async () => {
 		frames = await listFrames();
@@ -57,8 +79,8 @@
 		notice = null;
 		resetDraft();
 
-		if (!isPngFile(file) && !isSvgFile(file)) {
-			error = 'Format harus PNG atau SVG.';
+		if (!isPngFile(file) && !isSvgFile(file) && !isJpegFile(file) && !isWebpFile(file)) {
+			error = 'Format harus PNG, SVG, JPEG, atau WebP.';
 			input.value = '';
 			return;
 		}
@@ -73,31 +95,39 @@
 				dataUrl = await fileToDataUrl(file);
 			}
 
-			const result = await detectFrameSlots(dataUrl);
+			// Lubang transparan dulu; fallback ke bidang gelap pekat (JPEG/WebP,
+			// atau PNG/SVG yang flat tanpa transparansi).
+			let result = await detectFrameSlots(dataUrl);
+			let detectedFromDark = false;
+			if (result.boxes.length === 0) {
+				const keyed = await detectFrameSlots(dataUrl, {
+					mode: 'key',
+					keyColor: '#000000'
+				});
+				if (keyed.boxes.length > 0) {
+					result = keyed;
+					detectedFromDark = true;
+				}
+			}
 			if (result.boxes.length === 0) {
 				error =
-					'Tidak ada lubang transparan yang terdeteksi. Ekspor frame dengan background transparan, bukan putih.';
+					'Tidak ada kandidat yang terdeteksi. Pakai PNG dengan lubang transparan, atau bidang foto hitam pekat.';
 				return;
 			}
 			if (result.boxes.length > 6) {
-				error = `Frame punya ${result.boxes.length} lubang. Maksimal 6 foto per strip.`;
-				return;
-			}
-			if (!ratioMatches(result.width, result.height, result.boxes.length)) {
-				const guide = sizeGuideFor(result.boxes.length);
-				error = guide
-					? `Rasio artwork ${result.width} × ${result.height} tidak cocok untuk ${result.boxes.length} foto. Pakai canvas ${guide.width} × ${guide.height} px (${guide.cm}).`
-					: `Rasio artwork tidak cocok untuk ${result.boxes.length} foto.`;
+				error = `Frame punya ${result.boxes.length} kandidat. Maksimal 6 foto per strip.`;
 				return;
 			}
 
-			const baseName = file.name.replace(/\.(png|svg)$/i, '');
+			const baseName = file.name.replace(/\.(png|svg|jpe?g|webp)$/i, '');
 			draft = {
 				dataUrl,
 				width: result.width,
 				height: result.height,
-				boxes: result.boxes,
-				sourceName: baseName
+				sourceName: baseName,
+				detectedFromDark,
+				// Awalnya semua kandidat transparan; placeholder dibuat dari tombol.
+				candidates: result.boxes.map((box) => ({ box, placeholder: false }))
 			};
 			frameName = baseName;
 		} catch (e) {
@@ -109,27 +139,66 @@
 		}
 	}
 
+	function toggleCandidate(index: number): void {
+		if (!draft) return;
+		draft = {
+			...draft,
+			candidates: draft.candidates.map((candidate, i) =>
+				i === index ? { ...candidate, placeholder: !candidate.placeholder } : candidate
+			)
+		};
+	}
+
+	function setAllCandidates(placeholder: boolean): void {
+		if (!draft) return;
+		draft = {
+			...draft,
+			candidates: draft.candidates.map((candidate) => ({ ...candidate, placeholder }))
+		};
+	}
+
 	async function handleSave(): Promise<void> {
 		if (!draft || busy) return;
+		const candidates = draft.candidates;
+		const placeholders = candidates.filter((candidate) => candidate.placeholder).map((c) => c.box);
+		if (placeholders.length === 0) {
+			error = 'Minimal satu placeholder dulu. Ketuk kandidat yang mau diisi.';
+			return;
+		}
+		if (!ratioMatches(draft.width, draft.height, placeholders.length)) {
+			const guide = sizeGuideFor(placeholders.length);
+			error = guide
+				? `Rasio artwork ${draft.width} × ${draft.height} tidak cocok untuk ${placeholders.length} placeholder. Pakai canvas ${guide.width} × ${guide.height} px (${guide.cm}).`
+				: `Rasio artwork tidak cocok untuk ${placeholders.length} placeholder.`;
+			return;
+		}
+
 		const name = frameName.trim() || draft.sourceName;
 		const now = Date.now();
-		const frame: PhotoFrame = {
-			id: newId(),
-			name,
-			slotCount: draft.boxes.length,
-			designWidth: draft.width,
-			designHeight: draft.height,
-			artworkDataUrl: draft.dataUrl,
-			slots: boxesToSlots(draft.boxes),
-			focal,
-			source: 'upload',
-			createdAt: now,
-			updatedAt: now
-		};
 
 		busy = true;
 		error = null;
 		try {
+			// Wilayah yang tidak dijadikan placeholder "dihapus" jadi transparan,
+			// supaya artwork tidak lagi menyisakan kotak hitam.
+			const erased = candidates.filter((c) => !c.placeholder).map((c) => c.box);
+			const artworkDataUrl =
+				erased.length > 0 ? await eraseRegions(draft.dataUrl, erased) : draft.dataUrl;
+
+			const frame: PhotoFrame = {
+				id: newId(),
+				name,
+				slotCount: placeholders.length,
+				designWidth: draft.width,
+				designHeight: draft.height,
+				artworkDataUrl,
+				slots: boxesToSlots(placeholders),
+				focal,
+				source: 'upload',
+				createdAt: now,
+				updatedAt: now
+			};
+
 			await saveFrame(frame);
 			frames = await listFrames();
 			notice = `Frame "${name}" tersimpan.`;
@@ -177,18 +246,18 @@
 					<div>
 						<h2 class="card-title text-lg">Unggah artwork</h2>
 						<p class="text-sm text-base-content/70">
-							Ekspor dari Canva sebagai PNG transparan atau SVG. Setiap lubang transparan jadi satu
-							slot foto.
+							Ekspor dari Canva sebagai PNG transparan, atau JPEG/WebP/SVG dengan bidang foto hitam
+							pekat. Setiap lubang / bidang gelap jadi satu kandidat slot.
 						</p>
 					</div>
 
 					<input
 						type="file"
 						class="file-input w-full"
-						accept="image/png,image/svg+xml,.png,.svg"
+						accept="image/png,image/svg+xml,image/jpeg,image/webp,.png,.svg,.jpg,.jpeg,.webp"
 						onchange={handleFile}
 						disabled={busy}
-						aria-label="Pilih file frame PNG atau SVG"
+						aria-label="Pilih file frame PNG, SVG, JPEG, atau WebP"
 					/>
 
 					{#if busy}
@@ -213,26 +282,84 @@
 				<div class="card border border-base-300 bg-base-200">
 					<div class="card-body gap-4">
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<h2 class="card-title text-lg">Pratinjau deteksi</h2>
-							<span class="badge badge-neutral">{draft.boxes.length} slot</span>
+							<h2 class="card-title text-lg">Editor slot</h2>
+							<span class="badge badge-neutral">{placeholderCount} placeholder</span>
 						</div>
 
 						<div class="frame-preview">
 							<img src={draft.dataUrl} alt="Artwork frame yang diunggah" />
-							{#each draft.boxes as box, i (i)}
-								<span
+							{#each draft.candidates as candidate, i (i)}
+								{@const number = placeholderNumbers.get(i)}
+								<button
+									type="button"
 									class="slot-box"
-									style="left:{box.x * 100}%; top:{box.y * 100}%; width:{box.width *
-										100}%; height:{box.height * 100}%;"
+									class:is-placeholder={candidate.placeholder}
+									style="left:{candidate.box.x * 100}%; top:{candidate.box.y *
+										100}%; width:{candidate.box.width * 100}%; height:{candidate.box.height *
+										100}%;"
+									onclick={() => toggleCandidate(i)}
+									aria-pressed={candidate.placeholder}
+									aria-label={candidate.placeholder
+										? `Hapus placeholder ${number}`
+										: 'Jadikan placeholder'}
 								>
-									{i + 1}
-								</span>
+									{candidate.placeholder ? number : '×'}
+								</button>
 							{/each}
 						</div>
 
-						<p class="font-mono text-xs tracking-wider text-base-content/60">
-							{draft.width} × {draft.height} px · {draft.boxes.length} foto
-						</p>
+						<div class="flex flex-wrap items-center justify-between gap-3">
+							<p class="font-mono text-xs tracking-wider text-base-content/60">
+								{draft.width} × {draft.height} px · {placeholderCount} diisi · {transparentCount} dihapus
+							</p>
+							{#if draft.detectedFromDark}
+								<span class="badge badge-outline badge-sm">Terdeteksi dari bidang gelap</span>
+							{/if}
+						</div>
+
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<p class="text-xs text-base-content/60">
+								Ketuk kotak untuk ubah <strong>placeholder ⇄ transparan</strong>. Placeholder
+								dinomori 1 sampai {placeholderCount || 'N'} urut atas → bawah.
+							</p>
+							<div class="flex gap-2">
+								<button
+									type="button"
+									class="btn btn-outline btn-xs"
+									onclick={() => setAllCandidates(true)}
+								>
+									Placeholder semua
+								</button>
+								<button
+									type="button"
+									class="btn btn-outline btn-xs"
+									onclick={() => setAllCandidates(false)}
+								>
+									Hapus semua
+								</button>
+							</div>
+						</div>
+
+						<ul class="slot-list" aria-label="Kandidat slot">
+							{#each draft.candidates as candidate, i (i)}
+								{@const number = placeholderNumbers.get(i)}
+								<li class="slot-item" class:is-placeholder={candidate.placeholder}>
+									<span class="slot-index font-mono">{candidate.placeholder ? number : '—'}</span>
+									<span class="slot-name">
+										{candidate.placeholder ? `Placeholder ${number}` : 'Transparan'}
+									</span>
+									<button
+										type="button"
+										class="btn btn-xs"
+										class:btn-primary={!candidate.placeholder}
+										class:btn-ghost={candidate.placeholder}
+										onclick={() => toggleCandidate(i)}
+									>
+										{candidate.placeholder ? 'Hapus' : 'Placeholder'}
+									</button>
+								</li>
+							{/each}
+						</ul>
 
 						<fieldset class="fieldset">
 							<legend class="fieldset-legend">Nama frame</legend>
@@ -267,7 +394,12 @@
 							<button type="button" class="btn btn-ghost" onclick={resetDraft} disabled={busy}>
 								Batal
 							</button>
-							<button type="button" class="btn btn-primary" onclick={handleSave} disabled={busy}>
+							<button
+								type="button"
+								class="btn btn-primary"
+								onclick={handleSave}
+								disabled={busy || placeholderCount === 0}
+							>
 								Simpan frame
 							</button>
 						</div>
@@ -321,8 +453,8 @@
 				<div class="card-body gap-3">
 					<h2 class="card-title text-base">Ukuran canvas Canva</h2>
 					<p class="text-sm text-base-content/70">
-						Rasio harus sama dengan produk cetak. Selisih lebih dari 1% ditolak supaya foto tidak
-						terdistorsi.
+						Rasio harus sama dengan produk cetak placeholder. Selisih lebih dari 1% ditolak supaya
+						foto tidak terdistorsi.
 					</p>
 					<ul class="flex flex-col gap-2">
 						{#each FRAME_SIZE_GUIDES as guide (guide.slotCount)}
@@ -376,13 +508,64 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border: 1.5px dashed #2563eb;
-		background: rgba(37, 99, 235, 0.12);
-		color: #1d4ed8;
+		border: 1.5px dashed #94a3b8;
+		background: rgba(148, 163, 184, 0.18);
+		color: #64748b;
 		font-family: var(--font-mono);
-		font-size: 0.7rem;
+		font-size: 0.75rem;
 		font-weight: 700;
-		pointer-events: none;
+		cursor: pointer;
+		border-radius: 2px;
+	}
+
+	.slot-box:not(.is-placeholder) {
+		opacity: 0.72;
+	}
+
+	.slot-box.is-placeholder {
+		border-color: #2563eb;
+		background: rgba(37, 99, 235, 0.18);
+		color: #1d4ed8;
+	}
+
+	.slot-box:focus-visible {
+		outline: 2.5px solid var(--focus, #1d4ed8);
+		outline-offset: 2px;
+	}
+
+	.slot-list {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.slot-item {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 6px 10px;
+		border: 1px solid var(--color-base-300, #d6d3d1);
+		border-radius: var(--radius-box);
+		background: var(--color-base-100, #fafaf9);
+	}
+
+	.slot-item.is-placeholder {
+		border-color: #2563eb;
+	}
+
+	.slot-index {
+		width: 1.5rem;
+		font-size: 0.8rem;
+		color: var(--color-base-content, #1c1917);
+	}
+
+	.slot-name {
+		flex: 1;
+		font-size: 0.8rem;
+		color: var(--color-base-content, #1c1917);
 	}
 
 	.frame-thumb {

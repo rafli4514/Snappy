@@ -55,6 +55,14 @@ export function isPngFile(file: File): boolean {
 	return file.type === 'image/png' || /\.png$/i.test(file.name);
 }
 
+export function isJpegFile(file: File): boolean {
+	return file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
+}
+
+export function isWebpFile(file: File): boolean {
+	return file.type === 'image/webp' || /\.webp$/i.test(file.name);
+}
+
 /** Buang script, event handler, dan referensi eksternal dari SVG. */
 export function sanitizeSvg(svg: string): string {
 	return svg
@@ -154,6 +162,30 @@ export function boxesToSlots(boxes: DetectedBox[]): CustomSlot[] {
 		offsetX: 0,
 		offsetY: 0
 	}));
+}
+
+/**
+ * Hapus wilayah terpilih jadi transparan ("magic wand + delete") dan
+ * mengembalikan PNG data URL baru. Dipakai saat menyimpan frame yang
+ * punya slot terhapus, supaya artwork tidak lagi menampilkan kotaknya.
+ */
+export async function eraseRegions(dataUrl: string, boxes: DetectedBox[]): Promise<string> {
+	const img = await loadImageElement(dataUrl);
+	const canvas = document.createElement('canvas');
+	canvas.width = img.naturalWidth;
+	canvas.height = img.naturalHeight;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new Error('Kanvas tidak tersedia');
+	ctx.drawImage(img, 0, 0);
+	for (const box of boxes) {
+		// Melebar 1px supaya tidak ada garis sisa di tepi kandidat.
+		const x = Math.max(0, Math.floor(box.x * canvas.width) - 1);
+		const y = Math.max(0, Math.floor(box.y * canvas.height) - 1);
+		const w = Math.min(canvas.width - x, Math.ceil(box.width * canvas.width) + 2);
+		const h = Math.min(canvas.height - y, Math.ceil(box.height * canvas.height) + 2);
+		ctx.clearRect(x, y, w, h);
+	}
+	return canvas.toDataURL('image/png');
 }
 
 function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
