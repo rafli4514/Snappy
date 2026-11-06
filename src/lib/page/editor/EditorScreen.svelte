@@ -140,10 +140,29 @@
 		setActiveFrame(frame);
 	}
 
-	function formatOf(frame: PhotoFrame): string {
-		const format = frame.formatId ? formatById(frame.formatId) : null;
-		return format?.label.split('·')[0].trim() ?? 'KUSTOM';
+	function shortFormatLabel(formatId: string | null | undefined): string {
+		return formatById(formatId).label.split('·')[0].trim();
 	}
+
+	function formatOf(frame: PhotoFrame): string {
+		return frame.formatId ? shortFormatLabel(frame.formatId) : 'KUSTOM';
+	}
+
+	// ── Filter format: chip hanya muncul untuk format yang benar-benar ada ──
+	let formatFilter: string | null = null;
+
+	$: formatLabel = shortFormatLabel($session.formatId);
+
+	$: formatOptions = savedFrames.reduce<{ id: string; label: string }[]>((acc, item) => {
+		const id = item.frame.formatId;
+		if (!id || acc.some((option) => option.id === id)) return acc;
+		acc.push({ id, label: shortFormatLabel(id) });
+		return acc;
+	}, []);
+
+	$: visibleFrames = formatFilter
+		? savedFrames.filter((item) => item.frame.formatId === formatFilter)
+		: savedFrames;
 
 	function togglePanel(): void {
 		isPanelCollapsed = !isPanelCollapsed;
@@ -383,18 +402,37 @@
 		<!-- 3. RIGHT COLUMN: Template Inspector & NEXT -->
 		{#if !isPanelCollapsed}
 			<aside class="templates-column" aria-label="Pilih template">
-				<div class="panel-head panel-head--frames">
-					<h2 class="panel-title font-display">PILIH TEMPLATE</h2>
-					<p class="product-note font-mono">
-						{product.cm} · {photoCount} foto · {formatById($session.formatId).label}
-					</p>
+				<div class="filter-head">
+					<span id="filter-title" class="filter-title font-mono">Filter</span>
+					<div class="filter-chips" role="group" aria-labelledby="filter-title">
+						<button
+							type="button"
+							class="filter-chip font-mono"
+							class:is-active={formatFilter === null}
+							on:click={() => (formatFilter = null)}
+							aria-pressed={formatFilter === null ? 'true' : 'false'}
+						>
+							Semua
+						</button>
+						{#each formatOptions as option (option.id)}
+							<button
+								type="button"
+								class="filter-chip font-mono"
+								class:is-active={formatFilter === option.id}
+								on:click={() => (formatFilter = option.id)}
+								aria-pressed={formatFilter === option.id ? 'true' : 'false'}
+							>
+								{option.label}
+							</button>
+						{/each}
+					</div>
 				</div>
 
 				<div
 					class="templates-grid-scroll"
 					id="template-panel"
-					role="tabpanel"
-					aria-labelledby="template-panel-title"
+					role="region"
+					aria-label="Daftar template"
 				>
 					{#if savedFrames.length === 0}
 						<div class="empty-catalog">
@@ -419,35 +457,39 @@
 							<p class="empty-catalog-body font-mono">Admin bisa menambahkan lewat Frame Studio.</p>
 							<a class="empty-catalog-link font-mono" href="/admin/frames">Buka Frame Studio</a>
 						</div>
+					{:else if visibleFrames.length === 0}
+						<p class="filter-empty font-mono">Tidak ada template untuk filter ini.</p>
 					{:else}
 						<div class="preset-grid" role="group" aria-label="Template admin">
-							<button
-								type="button"
-								class="template-card"
-								class:is-selected={$session.activeFrame === null &&
+							{#if formatFilter === null}
+								<button
+									type="button"
+									class="template-card"
+									class:is-selected={$session.activeFrame === null &&
+										$session.customTemplateData === null &&
+										$session.selectedTemplate === 'classic'}
+									on:click={() => {
+										setActiveFrame(null);
+										selectBuiltinTemplate('classic');
+									}}
+									aria-pressed={$session.activeFrame === null &&
 									$session.customTemplateData === null &&
-									$session.selectedTemplate === 'classic'}
-								on:click={() => {
-									setActiveFrame(null);
-									selectBuiltinTemplate('classic');
-								}}
-								aria-pressed={$session.activeFrame === null &&
-								$session.customTemplateData === null &&
-								$session.selectedTemplate === 'classic'
-									? 'true'
-									: 'false'}
-								aria-label="Classic bawaan"
-							>
-								<span class="template-thumb design-thumb--builtin">
-									<span>Classic</span>
-									{#if $session.activeFrame === null && $session.customTemplateData === null && $session.selectedTemplate === 'classic'}
-										<span class="selected-mark" aria-hidden="true">✓</span>
-									{/if}
-								</span>
-								<span class="template-name">Classic (bawaan)</span>
-								<span class="template-badge font-mono">Kertas booth</span>
-							</button>
-							{#each savedFrames as item (item.frame.id)}
+									$session.selectedTemplate === 'classic'
+										? 'true'
+										: 'false'}
+									aria-label="Classic bawaan"
+								>
+									<span class="template-thumb design-thumb--builtin">
+										<span>Classic</span>
+										{#if $session.activeFrame === null && $session.customTemplateData === null && $session.selectedTemplate === 'classic'}
+											<span class="selected-mark" aria-hidden="true">✓</span>
+										{/if}
+									</span>
+									<span class="template-name">Classic (bawaan)</span>
+									<span class="template-badge font-mono">Kertas booth</span>
+								</button>
+							{/if}
+							{#each visibleFrames as item (item.frame.id)}
 								<button
 									type="button"
 									class="template-card"
@@ -458,7 +500,7 @@
 									aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
 									aria-label="{item.frame.name}{item.matched
 										? ''
-										: ` — butuh ${item.frame.slotCount} foto`}"
+										: `: butuh ${item.frame.slotCount} foto`}"
 								>
 									<span class="template-thumb">
 										<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
@@ -473,7 +515,7 @@
 										{formatOf(item.frame)}
 									</span>
 									{#if !item.matched}
-										<span class="template-note font-mono">{item.frame.slotCount} foto</span>
+										<span class="template-note font-mono">Butuh {item.frame.slotCount} foto</span>
 									{/if}
 								</button>
 							{/each}
@@ -482,6 +524,9 @@
 				</div>
 
 				<footer class="templates-footer">
+					<p class="footer-meta font-mono">
+						{product.cm} · {photoCount} foto · {formatLabel}
+					</p>
 					<button type="button" id="btn-next" class="capsule-cta font-mono" on:click={handleNext}>
 						SELANJUTNYA
 						<svg
@@ -971,25 +1016,132 @@
 		min-height: 0;
 	}
 
-	.panel-head {
+	/* ── Filter format di kepala panel ── */
+	.filter-head {
 		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px 14px 10px;
 		border-bottom: 1px solid var(--ring-line);
 	}
 
-	.panel-head--frames {
+	.filter-title {
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+
+	.filter-chips {
 		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		padding: 12px 14px 8px;
+		gap: 8px;
+		overflow-x: auto;
+		padding-bottom: 2px;
+		scrollbar-width: none;
+	}
+
+	.filter-chips::-webkit-scrollbar {
+		display: none;
+	}
+
+	.filter-chip {
+		flex: 0 0 auto;
+		min-height: 44px;
+		padding: 0 14px;
+		border: 1px solid var(--hairline);
+		border-radius: 10px;
+		background: transparent;
+		color: var(--fg-dim);
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease,
+			background-color 160ms ease;
+	}
+
+	.filter-chip:hover {
+		color: var(--fg);
+		border-color: var(--fg);
+	}
+
+	.filter-chip.is-active {
+		background: var(--fg);
+		border-color: var(--fg);
+		color: var(--bg);
+	}
+
+	.filter-chip:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	/* ── Grid template ── */
+	.templates-grid-scroll {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 12px 14px;
+	}
+
+	.preset-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 10px;
 	}
 
-	.panel-title {
+	.template-card {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		width: 100%;
+		min-width: 0;
+		padding: 8px;
+		border: 2px solid var(--ring-line);
+		border-radius: 12px;
+		background: transparent;
+		color: inherit;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			border-color 160ms ease,
+			background-color 160ms ease,
+			opacity 160ms ease;
+	}
+
+	.template-card:hover:not(:disabled) {
+		border-color: var(--hairline);
+		background: var(--ring-line);
+	}
+
+	.template-card.is-selected {
+		border-color: var(--fg);
+		box-shadow: 0 0 0 3px var(--halo);
+	}
+
+	.template-card.is-locked {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.template-card:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.filter-empty {
 		margin: 0;
-		font-size: 0.95rem;
-		font-weight: 650;
-		letter-spacing: 0.02em;
-		color: var(--fg);
+		padding: 28px 16px;
+		text-align: center;
+		font-size: 0.68rem;
+		line-height: 1.6;
+		color: var(--fg-dim);
 	}
 
 	.template-thumb {
@@ -1009,6 +1161,16 @@
 		height: 100%;
 		object-fit: contain;
 		display: block;
+	}
+
+	/* Classic tidak punya artwork: tampilkan kertas booth sebagai penanda. */
+	.design-thumb--builtin {
+		background: #fbf7f0;
+		color: #1c1917;
+		font-family: 'Playfair Display', Georgia, serif;
+		font-size: 1.5rem;
+		letter-spacing: 0.04em;
+		box-shadow: inset 0 0 0 1px rgba(28, 25, 23, 0.12);
 	}
 
 	.selected-mark {
@@ -1108,10 +1270,21 @@
 	}
 	/* Bottom Actions SELANJUTNYA button */
 	.templates-footer {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 		padding: 12px 14px 16px;
 		border-top: 1px solid var(--ring-line);
 		background: var(--bg);
 		flex-shrink: 0;
+	}
+
+	.footer-meta {
+		margin: 0;
+		text-align: center;
+		font-size: 0.58rem;
+		letter-spacing: 0.06em;
+		color: var(--fg-dim);
 	}
 
 	/* ── Zoom Dialog ── */
