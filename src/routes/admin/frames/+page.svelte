@@ -20,6 +20,7 @@
 		saveFrame,
 		sizeGuideFor
 	} from '#lib/utils/frameStorage';
+	import { STANDARD_FORMATS, detectFormat } from '#lib/data/standardFormats';
 	import type { DetectedBox } from '#lib/utils/frameDetect';
 	import type { PhotoFrame } from '#lib/types';
 
@@ -195,6 +196,7 @@
 				slots: boxesToSlots(placeholders),
 				focal,
 				source: 'upload',
+				formatId: detectFormat(draft.width, draft.height)?.id ?? null,
 				createdAt: now,
 				updatedAt: now
 			};
@@ -250,7 +252,8 @@
 						<h2 class="card-title text-lg">Unggah artwork</h2>
 						<p class="text-sm text-base-content/70">
 							Ekspor dari Canva sebagai PNG transparan, atau JPEG/WebP/SVG dengan bidang foto hitam
-							pekat. Setiap lubang / bidang gelap jadi satu kandidat slot.
+							pekat. Setiap lubang / bidang gelap jadi satu kandidat slot. Rasio yang cocok dengan
+							format standard (Katalog Standard) akan otomatis masuk kategori tersebut.
 						</p>
 					</div>
 
@@ -434,6 +437,9 @@
 									<p class="font-mono text-xs text-base-content/60">
 										{frame.slotCount} foto · {frame.designWidth} × {frame.designHeight} px
 									</p>
+									<span class="badge badge-outline badge-sm">
+										{STANDARD_FORMATS.find((f) => f.id === frame.formatId)?.label ?? 'KUSTOM'}
+									</span>
 									<div class="card-actions justify-end">
 										<button
 											type="button"
@@ -454,11 +460,12 @@
 		<aside class="flex flex-col gap-4" aria-label="Panduan ukuran canvas">
 			<div class="card border border-base-300 bg-base-200">
 				<div class="card-body gap-3">
-					<h2 class="card-title text-base">Ukuran canvas Canva</h2>
+					<h2 class="card-title text-base">Ukuran canvas</h2>
 					<p class="text-sm text-base-content/70">
-						Rasio harus sama dengan produk cetak placeholder. Selisih lebih dari 1% ditolak supaya
-						foto tidak terdistorsi.
+						Rasio harus sama dengan ukuran kustom (1–6 foto) atau salah satu format standard
+						(Katalog Standard). Selisih lebih dari 1% ditolak.
 					</p>
+					<p class="mt-2 font-mono text-[0.62rem] text-base-content/60">Ukuran kustom (1–6 foto)</p>
 					<ul class="flex flex-col gap-2">
 						{#each FRAME_SIZE_GUIDES as guide (guide.slotCount)}
 							<li class="flex items-baseline justify-between gap-3 border-b border-base-300 pb-2">
@@ -469,6 +476,18 @@
 							</li>
 						{/each}
 					</ul>
+					<p class="mt-3 font-mono text-[0.62rem] text-base-content/60">Format standard</p>
+					<ul class="flex flex-col gap-2">
+						{#each STANDARD_FORMATS as guide (guide.id)}
+							<li class="flex items-baseline justify-between gap-3 border-b border-base-300 pb-2">
+								<span class="font-mono text-xs">{guide.label}</span>
+								<span class="font-mono text-xs text-base-content/70">
+									{guide.pxW} × {guide.pxH} px
+								</span>
+							</li>
+						{/each}
+					</ul>
+					<a class="btn mt-2 btn-ghost btn-xs" href="/admin/standar">Buka Katalog Standard</a>
 				</div>
 			</div>
 		</aside>
