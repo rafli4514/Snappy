@@ -35,7 +35,7 @@
 	$: product = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
 	// ── Panel kanan: preset kertas bawaan · template buatan sendiri · frame tersimpan ──
-	type PanelTab = 'preset' | 'mine' | 'frame';
+	type PanelTab = 'preset' | 'mine';
 	let activeTab: PanelTab = 'preset';
 
 	$: presets = Object.values(TEMPLATES).map((t) => ({ key: t.id, label: t.label }));
@@ -52,7 +52,7 @@
 	}));
 
 	function isPresetSelected(key: string): boolean {
-		return !customTemplateData && $session.selectedTemplate === key;
+		return activeFrame === null && !customTemplateData && $session.selectedTemplate === key;
 	}
 
 	function isCustomSelected(template: CustomTemplate): boolean {
@@ -180,10 +180,12 @@
 
 	function selectPreset(key: string): void {
 		selectBuiltinTemplate(key);
+		setActiveFrame(null);
 	}
 
 	function selectCustom(template: CustomTemplate): void {
 		setCustomTemplate(template);
+		setActiveFrame(null);
 	}
 
 	function selectSavedFrame(frame: PhotoFrame): void {
@@ -496,18 +498,6 @@
 							>
 								Template Saya ({userTemplates.length})
 							</button>
-							<button
-								type="button"
-								id="tab-frame"
-								class="category-pill font-mono"
-								class:is-active={activeTab === 'frame'}
-								on:click={() => (activeTab = 'frame')}
-								role="tab"
-								aria-selected={activeTab === 'frame' ? 'true' : 'false'}
-								aria-controls="template-panel"
-							>
-								Frame ({savedFrames.length})
-							</button>
 						</div>
 						<p class="product-note font-mono">
 							{product.cm} cm · {photoCount} foto
@@ -539,41 +529,32 @@
 										<span class="template-name">{preset.label}</span>
 									</button>
 								{/each}
-							</div>
-						{:else if activeTab === 'frame'}
-							{#if savedFrames.length === 0}
-								<p class="empty-catalog font-mono">
-									Belum ada frame tersimpan. Buat di Katalog Standard (/admin/standar).
-								</p>
-							{:else}
-								<div class="preset-grid" role="group" aria-label="Frame tersimpan">
-									{#each savedFrames as item (item.frame.id)}
-										<button
-											type="button"
-											class="template-card"
-											class:is-selected={$session.activeFrame?.id === item.frame.id}
-											class:is-locked={!item.matched}
-											on:click={() => selectSavedFrame(item.frame)}
-											disabled={!item.matched}
-											aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
-											aria-label="{item.frame.name}{item.matched
-												? ''
-												: ` — butuh ${item.frame.slotCount} foto`}"
-										>
-											<span class="template-thumb">
-												<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
-												{#if $session.activeFrame?.id === item.frame.id}
-													<span class="selected-mark" aria-hidden="true">✓</span>
-												{/if}
-											</span>
-											<span class="template-name">{item.frame.name}</span>
-											{#if !item.matched}
-												<span class="template-note font-mono">{item.frame.slotCount} foto</span>
+								{#each savedFrames as item (item.frame.id)}
+									<button
+										type="button"
+										class="template-card"
+										class:is-selected={$session.activeFrame?.id === item.frame.id}
+										class:is-locked={!item.matched}
+										on:click={() => selectSavedFrame(item.frame)}
+										disabled={!item.matched}
+										aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
+										aria-label="{item.frame.name}{item.matched
+											? ''
+											: ` — butuh ${item.frame.slotCount} foto`}"
+									>
+										<span class="template-thumb">
+											<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
+											{#if $session.activeFrame?.id === item.frame.id}
+												<span class="selected-mark" aria-hidden="true">✓</span>
 											{/if}
-										</button>
-									{/each}
-								</div>
-							{/if}
+										</span>
+										<span class="template-name">{item.frame.name}</span>
+										{#if !item.matched}
+											<span class="template-note font-mono">{item.frame.slotCount} foto</span>
+										{/if}
+									</button>
+								{/each}
+							</div>
 						{:else if userTemplates.length === 0}
 							<p class="empty-catalog font-mono">
 								Belum ada template buatanmu. Template baru mengikuti jumlah foto sesi ini.
