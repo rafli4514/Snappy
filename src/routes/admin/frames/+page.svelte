@@ -235,7 +235,10 @@
 				<p class="font-mono text-xs tracking-[0.22em] text-base-content/60">ADMIN · FRAME STUDIO</p>
 				<h1 class="font-display text-2xl sm:text-3xl">Frame Canva</h1>
 			</div>
-			<a class="btn btn-ghost btn-sm" href="/strip">Kembali ke kios</a>
+			<div class="flex items-center gap-2">
+				<a class="btn btn-ghost btn-sm" href="/admin/standar">Katalog Standard</a>
+				<a class="btn btn-ghost btn-sm" href="/strip">Kembali ke kios</a>
+			</div>
 		</div>
 	</header>
 
