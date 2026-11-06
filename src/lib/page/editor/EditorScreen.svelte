@@ -114,12 +114,6 @@
 		const p = getProductForCount($session.photoCount, $session.formatId) || PRODUK[4];
 		canvas.width = Math.round(p.pxW / 2);
 		canvas.height = Math.round(p.pxH / 2);
-		canvas.style.aspectRatio = `${p.pxW} / ${p.pxH}`;
-		if (p.sheetOrient === 'landscape') {
-			canvas.style.height = 'clamp(230px, 30vh, 320px)';
-		} else {
-			canvas.style.height = '';
-		}
 		await renderStripPreview(
 			canvas,
 			photos,
@@ -896,40 +890,41 @@
 		flex: 1;
 		width: 100%;
 		min-height: 0;
+		padding: 8px 12px;
 	}
 
 	.strip-paper-frame {
 		position: relative;
-		height: clamp(360px, 78dvh, 760px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
 	}
 
 	.strip-canvas-zoom {
-		height: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
 		transition: transform 180ms ease;
 	}
 
+	/* Kanvas mengikuti rasio format (portrait / landscape / square) lewat
+	   object-fit; kotak elemen penuh, isi strip selalu utuh tanpa distorsi. */
 	.strip-canvas {
-		height: 100%;
-		width: auto;
-		aspect-ratio: 1 / 3;
-		border-radius: 8px;
-		box-shadow:
-			0 10px 26px rgba(11, 10, 9, 0.3),
-			0 0 0 1px var(--ring-line);
 		display: block;
+		width: 100%;
+		height: 100%;
 		object-fit: contain;
+		filter: drop-shadow(0 12px 28px rgba(11, 10, 9, 0.32)) drop-shadow(0 0 1px var(--ring-line));
 	}
 
 	.theme-light .strip-canvas {
-		box-shadow:
-			0 10px 26px rgba(28, 25, 23, 0.14),
-			0 0 0 1px var(--ring-line);
+		filter: drop-shadow(0 12px 28px rgba(28, 25, 23, 0.18)) drop-shadow(0 0 1px var(--ring-line));
 	}
 
 	.stage-chevron-btn {
