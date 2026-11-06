@@ -186,10 +186,19 @@
 		error = null;
 		try {
 			// Wilayah yang tidak dijadikan placeholder "dihapus" jadi transparan,
-			// supaya artwork tidak lagi menyisakan kotak hitam.
-			const erased = candidates.filter((c) => !c.placeholder).map((c) => c.box);
-			const artworkDataUrl =
-				erased.length > 0 ? await eraseRegions(draft.dataUrl, erased) : draft.dataUrl;
+			// supaya artwork tidak lagi menyisakan kotak hitam. Untuk artwork
+			// opaque (JPEG/WebP/bidang gelap), semua slot dihapus agar foto
+			// bisa masuk lewat overlay (tanpa ini kotak hitam menutupi foto).
+			const erasedBoxes = candidates.filter((c) => !c.placeholder).map((c) => c.box);
+			const allBoxes = candidates.map((c) => c.box);
+			const detectedFromDark = draft.detectedFromDark;
+			const isOpaque =
+				draft.dataUrl.startsWith('data:image/jpeg') || draft.dataUrl.startsWith('data:image/webp');
+			const needFlatten = isOpaque || detectedFromDark || erasedBoxes.length > 0;
+			const erasedList = isOpaque || detectedFromDark ? allBoxes : erasedBoxes;
+			const artworkDataUrl = needFlatten
+				? await eraseRegions(draft.dataUrl, erasedList)
+				: draft.dataUrl;
 
 			const frame: PhotoFrame = {
 				id: newId(),

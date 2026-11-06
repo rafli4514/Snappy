@@ -8,6 +8,7 @@
 		isPngFile,
 		isSvgFile,
 		isWebpFile,
+		eraseRegions,
 		sanitizeSvg,
 		svgToDataUrl
 	} from '#lib/utils/frameDetect';
@@ -107,12 +108,16 @@
 			}
 
 			let result = await detectFrameSlots(dataUrl);
+			let detectedFromDark = false;
 			if (result.boxes.length === 0) {
 				const keyed = await detectFrameSlots(dataUrl, {
 					mode: 'key',
 					keyColor: '#000000'
 				});
-				if (keyed.boxes.length > 0) result = keyed;
+				if (keyed.boxes.length > 0) {
+					result = keyed;
+					detectedFromDark = true;
+				}
 			}
 			if (result.boxes.length === 0) {
 				throw new Error(
@@ -132,6 +137,10 @@
 				);
 			}
 
+			const isOpaque = isJpegFile(file) || isWebpFile(file);
+			const needFlatten = isOpaque || detectedFromDark;
+			const artworkDataUrl = needFlatten ? await eraseRegions(dataUrl, result.boxes) : dataUrl;
+
 			const now = Date.now();
 			const frame: PhotoFrame = {
 				id: newId(),
@@ -139,7 +148,7 @@
 				slotCount: result.boxes.length,
 				designWidth: result.width,
 				designHeight: result.height,
-				artworkDataUrl: dataUrl,
+				artworkDataUrl,
 				slots: boxesToSlots(result.boxes),
 				focal: 'center',
 				source: 'upload',
