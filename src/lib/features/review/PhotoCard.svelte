@@ -3,13 +3,8 @@
 
 	export let photo: string | null = null;
 	export let index = 0;
-	/** Mode pilih: klik kartu = pilih/lepas, bukan zoom. */
-	export let selectable = false;
-	export let selected = false;
-	/** Urutan di strip (1-based); 0 = belum dipilih. */
-	export let order = 0;
 
-	const dispatch = createEventDispatcher<{ zoom: void; retake: void; toggle: void }>();
+	const dispatch = createEventDispatcher<{ zoom: void; retake: void }>();
 
 	let ratio = '4 / 3';
 
@@ -22,7 +17,7 @@
 
 	function handleActivate(): void {
 		if (!photo) return;
-		dispatch(selectable ? 'toggle' : 'zoom');
+		dispatch('zoom');
 	}
 
 	function handleKey(e: KeyboardEvent): void {
@@ -62,52 +57,39 @@
 
 <div
 	class="photo-slot"
-	class:is-selected={selectable && selected}
-	class:is-selectable={selectable}
 	style="aspect-ratio: {ratio};"
 	role="button"
 	tabindex="0"
-	aria-pressed={selectable ? selected : undefined}
-	aria-label={selectable
-		? selected
-			? `Lepas foto ${index + 1} dari pilihan`
-			: `Pilih foto ${index + 1}`
-		: `Perbesar foto ${index + 1}`}
+	aria-label="Lihat foto {index + 1} lebih besar"
 	on:click={handleActivate}
 	on:keydown={handleKey}
 >
 	{#if photo}
-		<img src={photo} alt="Foto hasil {index + 1}" on:load={handleImgLoad} />
-
-		{#if selectable && selected}
-			<span class="pick-badge font-mono" aria-hidden="true">{order}</span>
-		{/if}
+		<img src={photo} alt="Hasil foto {index + 1}" on:load={handleImgLoad} />
 
 		<div class="card-tools">
-			{#if selectable}
-				<button
-					type="button"
-					class="tool-btn font-mono"
-					aria-label="Perbesar foto {index + 1}"
-					on:click={handleZoom}
-					on:keydown={handleZoomKey}
+			<button
+				type="button"
+				class="tool-btn font-mono"
+				aria-label="Perbesar foto {index + 1}"
+				on:click={handleZoom}
+				on:keydown={handleZoomKey}
+			>
+				<svg
+					viewBox="0 0 24 24"
+					width="13"
+					height="13"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
 				>
-					<svg
-						viewBox="0 0 24 24"
-						width="13"
-						height="13"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<circle cx="11" cy="11" r="7" />
-						<path d="m21 21-4.3-4.3" />
-					</svg>
-				</button>
-			{/if}
+					<circle cx="11" cy="11" r="7" />
+					<path d="m21 21-4.3-4.3" />
+				</svg>
+			</button>
 			<button
 				type="button"
 				class="tool-btn font-mono"
@@ -147,21 +129,15 @@
 		cursor: pointer;
 		outline: 2px solid transparent;
 		outline-offset: 2px;
-		transition:
-			opacity 160ms ease,
-			outline-color 160ms ease;
+		transition: opacity 160ms ease;
 	}
 
-	.photo-slot.is-selectable:hover {
+	.photo-slot:hover {
 		opacity: 0.92;
 	}
 
-	.photo-slot.is-selectable:active {
+	.photo-slot:active {
 		opacity: 0.85;
-	}
-
-	.photo-slot.is-selected {
-		outline-color: var(--fg);
 	}
 
 	.photo-slot:focus-visible {
@@ -174,33 +150,6 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-	}
-
-	/* Foto di luar pilihan tetap terlihat, hanya diredupkan sedikit */
-	.photo-slot.is-selectable:not(.is-selected) img {
-		opacity: 0.62;
-		transition: opacity 160ms ease;
-	}
-
-	.photo-slot.is-selectable:not(.is-selected):hover img {
-		opacity: 0.85;
-	}
-
-	.pick-badge {
-		position: absolute;
-		top: 8px;
-		left: 8px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: var(--fg);
-		color: var(--bg);
-		font-size: 0.72rem;
-		font-weight: 800;
-		box-shadow: 0 2px 8px rgba(11, 10, 9, 0.35);
 	}
 
 	.card-tools {
@@ -269,7 +218,6 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.photo-slot,
-		.photo-slot img,
 		.tool-btn {
 			transition: none;
 		}

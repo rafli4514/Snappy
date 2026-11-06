@@ -86,7 +86,7 @@
 
 	.zoom-box {
 		position: relative;
-		width: min(92vw, 720px);
+		width: min(96vw, 880px);
 		padding: 10px;
 		background: var(--bg);
 		border: 1px solid var(--hairline);
@@ -98,7 +98,10 @@
 		display: block;
 		width: 100%;
 		height: auto;
+		max-height: 78dvh;
+		object-fit: contain;
 		border-radius: 10px;
+		background: var(--veil-edge);
 	}
 
 	/* Target sentuh minimum 44px (kios layar sentuh) */
