@@ -281,6 +281,8 @@ export interface RenderOptions {
 	selectedSlot?: number | null;
 	/** Jumlah salinan di lembar cetak; default mengikuti `PRODUK[n].copySheet`. */
 	copies?: number;
+	/** Format standard aktif (mis. '2x6'); dipakai produk cetak. */
+	formatId?: string | null;
 }
 
 // ─── Gallery sessions ────────────────────────────────────────────────────────
@@ -291,5 +293,6 @@ export interface GallerySession {
 	photos: string[];
 	stripDataUrl: string;
 	templateKey: string;
+	formatId?: string;
 	gifDataUrl?: string | null;
 }

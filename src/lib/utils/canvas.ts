@@ -8,6 +8,7 @@
  */
 
 import { getCustomTemplate, BUILTIN_STICKERS } from './customTemplateStorage';
+import { specFor, formatById } from '#lib/data/standardFormats';
 import {
 	isCustomTemplate,
 	type BuiltinTemplate,
@@ -175,13 +176,20 @@ export const PRODUK: Products = {
 };
 
 /** Produk bawaan bila jumlah di luar 1–6 (jaga-jaga). */
-function produkUntuk(count: number): ProductSpec {
+function produkUntuk(count: number, formatId?: string | null): ProductSpec {
+	if (formatId) {
+		try {
+			return specFor(formatId, count);
+		} catch {
+			/* fall through to legacy */
+		}
+	}
 	return PRODUK[count] || PRODUK[4];
 }
 
 /** Get the print product for a photo count, with the 4-photo fallback. */
-export function getProductForCount(count: number): ProductSpec {
-	return produkUntuk(count);
+export function getProductForCount(count: number, formatId?: string | null): ProductSpec {
+	return produkUntuk(count, formatId);
 }
 
 /**
@@ -396,7 +404,7 @@ async function renderBuiltinStrip(
 	const stickers = options.stickers || [];
 	const photoFilter = options.photoFilter || 'none';
 	const t = template;
-	const p = produkUntuk(count);
+	const p = produkUntuk(count, options.formatId);
 	const k = stripW / p.pxW;
 	const ky = stripH / p.pxH;
 
@@ -477,6 +485,19 @@ async function renderBuiltinStrip(
 	}
 
 	ctx.filter = 'none';
+
+	// Garis potong putus-putus (4R Double: dua strip berdampingan)
+	if (p.cutLine === 'vertical') {
+		ctx.save();
+		ctx.setLineDash([Math.max(6, 10 * k), Math.max(4, 7 * k)]);
+		ctx.strokeStyle = t.slotLine || '#2B26201A';
+		ctx.lineWidth = Math.max(1, 2 * k);
+		ctx.beginPath();
+		ctx.moveTo(stripX + stripW / 2, stripY + areaY);
+		ctx.lineTo(stripX + stripW / 2, stripY + stripH - footerH);
+		ctx.stroke();
+		ctx.restore();
+	}
 
 	// Indikator slot terpilih (edit screen): outline putus di sekitar slot terpilih
 	if (selectedRect) {
@@ -936,11 +957,10 @@ export async function renderExportCanvas(
 	options: RenderOptions = {}
 ): Promise<HTMLCanvasElement> {
 	const count = (photoDataUrls || []).length || 4;
-	const p = produkUntuk(count);
-	const landscape = p.sheetOrient === 'landscape';
+	const p = produkUntuk(count, options.formatId);
 
-	const SHEET_W = landscape ? 1800 : 1200;
-	const SHEET_H = landscape ? 1200 : 1800;
+	const SHEET_W = p.pxW;
+	const SHEET_H = p.pxH;
 	// Jumlah salinan bisa dipilih tamu (frame 2-slot), dibatasi kapasitas produk.
 	const copies = Math.max(1, Math.min(Math.round(options.copies ?? p.copySheet), p.copySheet));
 

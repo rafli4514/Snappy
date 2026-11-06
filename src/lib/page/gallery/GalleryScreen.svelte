@@ -3,7 +3,7 @@
 	import { loadGallerySession, buildAnimatedGif } from '#lib/services/gallery';
 	import { playGrekSound } from '#lib/utils/audio';
 	import { goTo } from '#lib/stores/session';
-	import { PRODUK } from '#lib/utils/canvas';
+	import { getProductForCount } from '#lib/utils/canvas';
 	import type { GallerySession } from '#lib/types';
 
 	export let sessionId: string = '';
@@ -47,7 +47,9 @@
 	}
 
 	/** Produk strip sesuai jumlah foto galeri (ukuran cetak nyata). */
-	$: produk = galleryData ? PRODUK[galleryData.photos.length] || PRODUK[4] : PRODUK[4];
+	$: produk = galleryData
+		? getProductForCount(galleryData.photos.length, galleryData.formatId ?? '2x6')
+		: getProductForCount(4, '2x6');
 
 	$: cardItems = galleryData
 		? ([

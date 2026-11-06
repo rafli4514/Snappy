@@ -10,7 +10,7 @@
 		updatePhotoTransform,
 		stripPhotos
 	} from '#lib/stores/session';
-	import { PRODUK, renderStripPreview } from '#lib/utils/canvas';
+	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
 	import { FUNCAM_STICKERS, type FuncamSticker } from '#lib/data/funcamStickers';
@@ -73,7 +73,7 @@
 		if (!canvas) return;
 		const seq = ++renderSeq;
 		const isStale = (): boolean => seq !== renderSeq;
-		const p = PRODUK[$session.photoCount] || PRODUK[4];
+		const p = getProductForCount($session.photoCount, $session.formatId) || PRODUK[4];
 		canvas.width = Math.round(p.pxW / 2);
 		canvas.height = Math.round(p.pxH / 2);
 		canvas.style.aspectRatio = `${p.pxW} / ${p.pxH}`;
@@ -93,7 +93,8 @@
 				photoTransforms,
 				stickers,
 				photoFilter,
-				selectedSlot: selectedPhoto
+				selectedSlot: selectedPhoto,
+				formatId: $session.formatId
 			},
 			isStale
 		);
@@ -226,7 +227,7 @@
 		const fy = (clientY - rect.top) / rect.height;
 		const px = fx * target.width;
 		const py = fy * target.height;
-		const p = PRODUK[photoCount] || PRODUK[4];
+		const p = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
 		const custom = typeof activeTemplate === 'string' ? null : activeTemplate;
 		if (custom) {

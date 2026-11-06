@@ -9,7 +9,7 @@
 		movePhoto,
 		stripPhotos
 	} from '#lib/stores/session';
-	import { PRODUK, TEMPLATES, renderStripPreview } from '#lib/utils/canvas';
+	import { PRODUK, TEMPLATES, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import TemplateThumb from '#lib/features/editor/TemplateThumb.svelte';
 	import CustomTemplateBuilder from '#lib/features/editor/CustomTemplateBuilder.svelte';
@@ -30,7 +30,7 @@
 	$: activeTemplate = activeFrame
 		? frameToTemplate(activeFrame)
 		: customTemplateData || $session.selectedTemplate;
-	$: product = PRODUK[photoCount] || PRODUK[4];
+	$: product = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
 	// ── Panel kanan: preset kertas bawaan · template buatan sendiri ──
 	type PanelTab = 'preset' | 'mine';
@@ -127,7 +127,7 @@
 		if (!canvas) return;
 		const seq = ++renderSeq;
 		const isStale = (): boolean => seq !== renderSeq;
-		const p = PRODUK[$session.photoCount] || PRODUK[4];
+		const p = getProductForCount($session.photoCount, $session.formatId) || PRODUK[4];
 		canvas.width = Math.round(p.pxW / 2);
 		canvas.height = Math.round(p.pxH / 2);
 		canvas.style.aspectRatio = `${p.pxW} / ${p.pxH}`;
@@ -140,7 +140,7 @@
 			canvas,
 			photos,
 			activeTemplate,
-			{ caption, showDate, showSlotNumbers },
+			{ caption, showDate, showSlotNumbers, formatId: $session.formatId },
 			isStale
 		);
 	}

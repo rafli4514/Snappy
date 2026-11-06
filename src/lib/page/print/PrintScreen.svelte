@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { session, goTo, resetSession, stripPhotos } from '#lib/stores/session';
-	import { PRODUK, renderExportCanvas } from '#lib/utils/canvas';
+	import { getProductForCount, renderExportCanvas } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
+	import { formatById } from '#lib/data/standardFormats';
 	import { downloadStripPNG, printStrip } from '#lib/utils/export';
 	import {
 		saveGallerySession,
@@ -36,9 +37,11 @@
 	$: activeTemplate = activeFrame
 		? frameToTemplate(activeFrame)
 		: customTemplateData || templateKey;
+	$: printFormat = formatById($session.formatId);
+	$: isDigital = printFormat.kind === 'digital';
 
 	// Produk aktif = ukuran cetak nyata per jumlah foto
-	$: produk = PRODUK[$session.photoCount] || PRODUK[4];
+	$: produk = getProductForCount($session.photoCount, $session.formatId);
 	$: sheetLandscape = produk.sheetOrient === 'landscape';
 	// Salinan bisa dipilih tamu untuk produk Two up; produk lain tetap 1.
 	let copiesChoice: number | null = null;
@@ -63,7 +66,8 @@
 			const fullCanvas = await renderExportCanvas(photos, activeTemplate, {
 				caption,
 				showDate,
-				copies
+				copies,
+				formatId: $session.formatId
 			});
 			previewCanvas.width = fullCanvas.width > fullCanvas.height ? 600 : 400;
 			previewCanvas.height = fullCanvas.width > fullCanvas.height ? 400 : 600;
@@ -96,7 +100,8 @@
 						const exportCanvas = await renderExportCanvas(photos, activeTemplate, {
 							caption,
 							showDate,
-							copies
+							copies,
+							formatId: $session.formatId
 						});
 						stripDataUrl = exportCanvas.toDataURL('image/png');
 					} catch (ce) {
@@ -169,6 +174,10 @@
 			.catch(() => {});
 	}
 </script>
+
+<svelte:head>
+	{@html `<style id="print-page-size">@page { size: ${printFormat.pxW / 300}in ${printFormat.pxH / 300}in; }</style>`}
+</svelte:head>
 
 <section class="print-screen screen-enter">
 	<header class="print-header">
@@ -381,18 +390,51 @@
 				</div>
 			{/if}
 			<div class="print-actions-wrapper">
-				<div class="print-btn-with-info">
-					<button
-						id="btn-print"
-						class="btn-print-main btn btn-primary"
-						on:click={handlePrint}
-						disabled={isPrinting}
-						aria-label="Print photo strip"
-					>
-						{#if isPrinting}
-							<div class="btn-spinner" aria-hidden="true"></div>
-							<span>Menyiapkan Cetak…</span>
-						{:else}
+				{#if !isDigital}
+					<div class="print-btn-with-info">
+						<button
+							id="btn-print"
+							class="btn-print-main btn btn-primary"
+							on:click={handlePrint}
+							disabled={isPrinting}
+							aria-label="Print photo strip"
+						>
+							{#if isPrinting}
+								<div class="btn-spinner" aria-hidden="true"></div>
+								<span>Menyiapkan Cetak…</span>
+							{:else}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<polyline points="6 9 6 2 18 2 18 9" />
+									<path
+										d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+									/>
+									<rect x="6" y="14" width="12" height="8" />
+								</svg>
+								<span>Cetak {printFormat.label}</span>
+							{/if}
+						</button>
+
+						<!-- Printer Setup Info Icon (i) -->
+						<button
+							type="button"
+							class="printer-info-icon-btn"
+							on:click={() => {
+								showPrinterInfo = !showPrinterInfo;
+							}}
+							title="Printer Setup Checklist"
+							aria-label="Printer setup information"
+							aria-expanded={showPrinterInfo}
+						>
 							<svg
 								width="18"
 								height="18"
@@ -404,44 +446,13 @@
 								stroke-linejoin="round"
 								aria-hidden="true"
 							>
-								<polyline points="6 9 6 2 18 2 18 9" />
-								<path
-									d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
-								/>
-								<rect x="6" y="14" width="12" height="8" />
+								<circle cx="12" cy="12" r="10" />
+								<line x1="12" y1="16" x2="12" y2="12" />
+								<line x1="12" y1="8" x2="12.01" y2="8" />
 							</svg>
-							<span>Cetak 4R Photo Strip</span>
-						{/if}
-					</button>
-
-					<!-- Printer Setup Info Icon (i) -->
-					<button
-						type="button"
-						class="printer-info-icon-btn"
-						on:click={() => {
-							showPrinterInfo = !showPrinterInfo;
-						}}
-						title="Printer Setup Checklist"
-						aria-label="Printer setup information"
-						aria-expanded={showPrinterInfo}
-					>
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<circle cx="12" cy="12" r="10" />
-							<line x1="12" y1="16" x2="12" y2="12" />
-							<line x1="12" y1="8" x2="12.01" y2="8" />
-						</svg>
-					</button>
-				</div>
+						</button>
+					</div>
+				{/if}
 
 				<button
 					id="btn-download-png"

@@ -163,9 +163,7 @@ export function formatById(id: string | null | undefined): StandardFormat {
 export function detectFormat(width: number, height: number): StandardFormat | null {
 	if (width <= 0 || height <= 0) return null;
 	const actual = width / height;
-	return (
-		STANDARD_FORMATS.find((f) => Math.abs(actual / f.ratio - 1) <= 0.01) ?? null
-	);
+	return STANDARD_FORMATS.find((f) => Math.abs(actual / f.ratio - 1) <= 0.01) ?? null;
 }
 
 /** Spec layout slot untuk tiap format & jumlah foto yang diizinkan. */

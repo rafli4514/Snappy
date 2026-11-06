@@ -379,7 +379,7 @@
 
 	.frame-sub {
 		font-size: 0.62rem;
-		color: var(--color-base-content/60);
+		color: color-mix(in srgb, var(--color-base-content) 60%, transparent);
 		margin: 2px 0 0;
 	}
 
