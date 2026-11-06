@@ -7,10 +7,14 @@
 		addSticker,
 		moveSticker,
 		removeSticker,
-		updatePhotoTransform
+		updatePhotoTransform,
+		stripPhotos
 	} from '#lib/stores/session';
 	import { PRODUK, renderStripPreview } from '#lib/utils/canvas';
+	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
+	import { FUNCAM_STICKERS, type FuncamSticker } from '#lib/data/funcamStickers';
+	import { FUNCAM_FILTERS } from '#lib/data/funcamFilters';
 	import type { BuiltinSticker, PhotoTransform, StickerLayer } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -18,8 +22,9 @@
 	let selectedPhoto = 0;
 
 	$: theme = $session.theme;
-	$: photos = $session.photos;
+	$: photos = $stripPhotos;
 	$: photoCount = $session.photoCount;
+	$: activeFrame = $session.activeFrame;
 	$: customTemplateData = $session.customTemplateData;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
@@ -27,7 +32,9 @@
 	$: stickers = $session.stickers;
 	$: photoFilter = $session.photoFilter;
 
-	$: activeTemplate = customTemplateData || $session.selectedTemplate;
+	$: activeTemplate = activeFrame
+		? frameToTemplate(activeFrame)
+		: customTemplateData || $session.selectedTemplate;
 	// Nilai transform foto terpilih — dipakai reaktif di template (label & slider)
 	$: selectedTransform = photoTransforms[selectedPhoto] ?? null;
 	$: rotationValue = selectedTransform?.rotation ?? 0;
@@ -41,13 +48,25 @@
 	let showSlotNumbers = true;
 	let renderSeq = 0;
 
-	const FILTERS: { key: string; label: string }[] = [
-		{ key: 'none', label: 'Asli' },
-		{ key: 'grayscale', label: 'Grayscale' },
-		{ key: 'sepia', label: 'Sepia' },
-		{ key: 'warm', label: 'Hangat' },
-		{ key: 'cool', label: 'Dingin' },
-		{ key: 'high-contrast', label: 'Kontras Tinggi' }
+	// Filter data dari FUNCAM_FILTERS (5 kategori, exact recipe)
+	const FILTER_GROUPS = [
+		{
+			label: 'Essential',
+			key: 'essential',
+			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Essential')
+		},
+		{ label: 'Retro', key: 'retro', filters: FUNCAM_FILTERS.filter((f) => f.category === 'Retro') },
+		{ label: 'Fun', key: 'fun', filters: FUNCAM_FILTERS.filter((f) => f.category === 'Fun') },
+		{
+			label: 'Distort',
+			key: 'distort',
+			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Distort')
+		},
+		{
+			label: 'B&W',
+			key: 'bw',
+			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Black & White')
+		}
 	];
 
 	async function renderPreview(): Promise<void> {
@@ -163,14 +182,16 @@
 		dragStickerId = null;
 	}
 
-	function handleAddSticker(sticker: BuiltinSticker): void {
+	function handleAddFuncamSticker(sticker: FuncamSticker): void {
+		// Build a placeholder SVG sticker from the FuncamSticker metadata
+		// Real WebP assets will be dropped in static/stickers/Pixel/ later
 		const layer: StickerLayer = {
-			id: `${sticker.id}-${Date.now()}`,
-			stickerId: sticker.id,
-			x: Math.max(0, 0.5 - sticker.width / 2),
-			y: Math.max(0, 0.18),
-			w: sticker.width,
-			h: sticker.height,
+			id: `funcam-${sticker.dbId}-${Date.now()}`,
+			stickerId: `funcam-${sticker.dbId}`,
+			x: Math.max(0, 0.5 - 0.25),
+			y: 0.1,
+			w: sticker.size.w / 600,
+			h: sticker.size.h / 1800,
 			rotation: 0,
 			opacity: 1
 		};
@@ -207,7 +228,7 @@
 		const py = fy * target.height;
 		const p = PRODUK[photoCount] || PRODUK[4];
 
-		const custom = customTemplateData;
+		const custom = typeof activeTemplate === 'string' ? null : activeTemplate;
 		if (custom) {
 			const slots = custom.slots || [];
 			for (let i = 0; i < slots.length; i++) {
@@ -593,26 +614,31 @@
 			{:else if activeTab === 'filter'}
 				<div class="tab-panel">
 					<div class="tab-photo-list">
-						{#each FILTERS as f (f.key)}
-							<button
-								type="button"
-								class="tab-action-btn font-mono"
-								class:is-active={photoFilter === f.key}
-								on:click={() => setPhotoFilter(f.key)}
-							>
-								{f.label}
-							</button>
+						{#each FILTER_GROUPS as group}
+							<div class="filter-group">
+								<span class="filter-group-label">{group.label}</span>
+								{#each group.filters as f (f.key)}
+									<button
+										type="button"
+										class="tab-action-btn font-mono"
+										class:is-active={photoFilter === f.key}
+										on:click={() => setPhotoFilter(f.key)}
+									>
+										{f.name}
+									</button>
+								{/each}
+							</div>
 						{/each}
 					</div>
 				</div>
 			{:else}
 				<div class="tab-panel">
 					<div class="tab-photo-list">
-						{#each BUILTIN_STICKERS as s (s.id)}
+						{#each FUNCAM_STICKERS as s (s.dbId)}
 							<button
 								type="button"
 								class="tab-action-btn font-mono"
-								on:click={() => handleAddSticker(s)}
+								on:click={() => handleAddFuncamSticker(s)}
 							>
 								✦ {s.name}
 							</button>

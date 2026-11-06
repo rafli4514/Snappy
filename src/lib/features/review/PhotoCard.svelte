@@ -3,8 +3,13 @@
 
 	export let photo: string | null = null;
 	export let index = 0;
+	/** Mode pilih: klik kartu = pilih/lepas, bukan zoom. */
+	export let selectable = false;
+	export let selected = false;
+	/** Urutan di strip (1-based); 0 = belum dipilih. */
+	export let order = 0;
 
-	const dispatch = createEventDispatcher<{ zoom: void; retake: void }>();
+	const dispatch = createEventDispatcher<{ zoom: void; retake: void; toggle: void }>();
 
 	let ratio = '4 / 3';
 
@@ -15,11 +20,16 @@
 		}
 	}
 
+	function handleActivate(): void {
+		if (!photo) return;
+		dispatch(selectable ? 'toggle' : 'zoom');
+	}
+
 	function handleKey(e: KeyboardEvent): void {
 		if (!photo) return;
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			dispatch('zoom');
+			handleActivate();
 		}
 	}
 
@@ -35,42 +45,93 @@
 			dispatch('retake');
 		}
 	}
+
+	function handleZoom(e: MouseEvent): void {
+		e.stopPropagation();
+		dispatch('zoom');
+	}
+
+	function handleZoomKey(e: KeyboardEvent): void {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			e.stopPropagation();
+			dispatch('zoom');
+		}
+	}
 </script>
 
 <div
 	class="photo-slot"
+	class:is-selected={selectable && selected}
+	class:is-selectable={selectable}
 	style="aspect-ratio: {ratio};"
 	role="button"
 	tabindex="0"
-	aria-label="Perbesar foto {index + 1}"
-	on:click={() => photo && dispatch('zoom')}
+	aria-pressed={selectable ? selected : undefined}
+	aria-label={selectable
+		? selected
+			? `Lepas foto ${index + 1} dari pilihan`
+			: `Pilih foto ${index + 1}`
+		: `Perbesar foto ${index + 1}`}
+	on:click={handleActivate}
 	on:keydown={handleKey}
 >
 	{#if photo}
 		<img src={photo} alt="Foto hasil {index + 1}" on:load={handleImgLoad} />
-		<button
-			type="button"
-			class="retake-btn font-mono"
-			aria-label="Ambil ulang foto {index + 1}"
-			on:click={handleRetake}
-			on:keydown={handleRetakeKey}
-		>
-			<svg
-				viewBox="0 0 24 24"
-				width="12"
-				height="12"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
+
+		{#if selectable && selected}
+			<span class="pick-badge font-mono" aria-hidden="true">{order}</span>
+		{/if}
+
+		<div class="card-tools">
+			{#if selectable}
+				<button
+					type="button"
+					class="tool-btn font-mono"
+					aria-label="Perbesar foto {index + 1}"
+					on:click={handleZoom}
+					on:keydown={handleZoomKey}
+				>
+					<svg
+						viewBox="0 0 24 24"
+						width="13"
+						height="13"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="11" cy="11" r="7" />
+						<path d="m21 21-4.3-4.3" />
+					</svg>
+				</button>
+			{/if}
+			<button
+				type="button"
+				class="tool-btn font-mono"
+				aria-label="Ambil ulang foto {index + 1}"
+				on:click={handleRetake}
+				on:keydown={handleRetakeKey}
 			>
-				<path d="M1 4v6h6" />
-				<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
-			</svg>
-			Ulang
-		</button>
+				<svg
+					viewBox="0 0 24 24"
+					width="12"
+					height="12"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M1 4v6h6" />
+					<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
+				</svg>
+				Ulang
+			</button>
+		</div>
 	{:else}
 		<span class="slot-empty font-mono">Foto {index + 1}</span>
 	{/if}
@@ -84,15 +145,23 @@
 		overflow: hidden;
 		background: var(--veil-edge);
 		cursor: pointer;
-		transition: opacity 160ms ease;
+		outline: 2px solid transparent;
+		outline-offset: 2px;
+		transition:
+			opacity 160ms ease,
+			outline-color 160ms ease;
 	}
 
-	.photo-slot:hover {
+	.photo-slot.is-selectable:hover {
 		opacity: 0.92;
 	}
 
-	.photo-slot:active {
+	.photo-slot.is-selectable:active {
 		opacity: 0.85;
+	}
+
+	.photo-slot.is-selected {
+		outline-color: var(--fg);
 	}
 
 	.photo-slot:focus-visible {
@@ -107,15 +176,49 @@
 		object-fit: cover;
 	}
 
-	.retake-btn {
+	/* Foto di luar pilihan tetap terlihat, hanya diredupkan sedikit */
+	.photo-slot.is-selectable:not(.is-selected) img {
+		opacity: 0.62;
+		transition: opacity 160ms ease;
+	}
+
+	.photo-slot.is-selectable:not(.is-selected):hover img {
+		opacity: 0.85;
+	}
+
+	.pick-badge {
 		position: absolute;
-		bottom: 8px;
+		top: 8px;
+		left: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		background: var(--fg);
+		color: var(--bg);
+		font-size: 0.72rem;
+		font-weight: 800;
+		box-shadow: 0 2px 8px rgba(11, 10, 9, 0.35);
+	}
+
+	.card-tools {
+		position: absolute;
 		right: 8px;
+		bottom: 8px;
+		display: flex;
+		gap: 6px;
+	}
+
+	.tool-btn {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 5px;
+		min-width: 36px;
 		min-height: 36px;
-		padding: 0 12px;
+		padding: 0 10px;
 		border: 1px solid rgba(255, 255, 255, 0.25);
 		border-radius: 999px;
 		background: rgba(11, 10, 9, 0.6);
@@ -133,21 +236,21 @@
 			background-color 160ms ease;
 	}
 
-	.photo-slot:hover .retake-btn,
-	.photo-slot:focus-within .retake-btn {
+	.photo-slot:hover .tool-btn,
+	.photo-slot:focus-within .tool-btn {
 		opacity: 1;
 		transform: translateY(0);
 	}
 
-	.retake-btn:hover {
+	.tool-btn:hover {
 		background: rgba(11, 10, 9, 0.8);
 	}
 
-	.retake-btn:active {
+	.tool-btn:active {
 		transform: scale(0.96);
 	}
 
-	.retake-btn:focus-visible {
+	.tool-btn:focus-visible {
 		outline: 2.5px solid var(--focus);
 		outline-offset: 3px;
 		opacity: 1;
@@ -165,17 +268,16 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.photo-slot {
-			transition: none;
-		}
-		.retake-btn {
+		.photo-slot,
+		.photo-slot img,
+		.tool-btn {
 			transition: none;
 		}
 	}
 
-	/* Touch devices: always show the retake button */
+	/* Touch devices: always show the controls */
 	@media (hover: none) {
-		.retake-btn {
+		.tool-btn {
 			opacity: 1;
 			transform: translateY(0);
 		}

@@ -1,8 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { PRODUK, renderStripPreview } from '#lib/utils/canvas';
-	import { session, goTo, setPhotoCount } from '#lib/stores/session';
+	import {
+		session,
+		goTo,
+		setPhotoCount,
+		setCustomTemplate,
+		setActiveFrame
+	} from '#lib/stores/session';
+	import { listFrames } from '#lib/utils/frameStorage';
+	import FramePicker from '#lib/features/frame/FramePicker.svelte';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import type { PhotoFrame } from '#lib/types';
 
 	/**
 	 * Layar "BERAPA FOTO?" — panggung pamer: kiri = rak miniatur vertikal
@@ -13,6 +22,9 @@
 	 * tinggi via ResizeObserver (flex berantai tak "definite" untuk persen CSS).
 	 */
 	const JUMLAH = [1, 2, 3, 4, 5, 6];
+
+	let tab = $state<'frame' | 'klasik'>('klasik');
+	let frameCount = $state(0);
 
 	let sectionEl: HTMLElement;
 	let produkEl: HTMLElement;
@@ -46,6 +58,17 @@
 		})
 	);
 
+	/* Clamp photoCount ke rentang JUMLAH agar tidak out-of-bounds */
+	$effect(() => {
+		const pc = $session.photoCount;
+		if (!JUMLAH.includes(pc)) setPhotoCount(JUMLAH[JUMLAH.length - 1]);
+	});
+
+	/* Safe photo count for display: clamp to JUMLAH range */
+	const safePhotoCount = $derived(
+		JUMLAH[Math.min($session.photoCount - 1, JUMLAH.length - 1)] || 6
+	);
+
 	/* Sisi kiri/kanan etalase: ruang agar slide pertama/terakhir bisa ke tengah */
 	const padEtalase = $derived(Math.max(24, Math.round((lebarEtalase - slotLebar) / 2)));
 
@@ -64,6 +87,10 @@
 	}
 
 	onMount(() => {
+		void listFrames().then((frames) => {
+			frameCount = frames.length;
+			if ($session.activeFrame || frames.length > 0) tab = 'frame';
+		});
 		const ro = new ResizeObserver(ukur);
 		ro.observe(sectionEl);
 		ukur();
@@ -75,10 +102,12 @@
 				gulirTerprogram = false;
 			}
 		};
-		etalaseEl.addEventListener('scrollend', selesaiLuncur);
+		// Simpan ref lokal: saat teardown Svelte sudah mengosongkan etalaseEl.
+		const etalase = etalaseEl;
+		etalase?.addEventListener('scrollend', selesaiLuncur);
 		return () => {
 			ro.disconnect();
-			etalaseEl.removeEventListener('scrollend', selesaiLuncur);
+			etalase?.removeEventListener('scrollend', selesaiLuncur);
 		};
 	});
 
@@ -111,7 +140,7 @@
 
 	// Kartu rak aktif selalu masuk pandangan (fallback layar pendek)
 	$effect(() => {
-		const n = $session.photoCount;
+		const n = safePhotoCount;
 		const aktif = deckGulir && deckGulir.querySelector('.aktif');
 		if (aktif && n)
 			aktif.scrollIntoView({ block: 'nearest', inline: 'center', behavior: gerakHalus() });
@@ -169,7 +198,7 @@
 					terbaik = i + 1;
 				}
 			});
-			if (terbaik && terbaik !== $session.photoCount) setPhotoCount(terbaik);
+			if (terbaik && terbaik !== safePhotoCount) setPhotoCount(terbaik);
 		});
 	}
 
@@ -180,14 +209,19 @@
 		if (!sudahPusat && etalaseEl && slideEls.length && lebarEtalase > 0) {
 			sudahPusat = true;
 			requestAnimationFrame(() => {
-				requestAnimationFrame(() => pusatkan($session.photoCount, false));
+				requestAnimationFrame(() => pusatkan(safePhotoCount, false));
 			});
 		}
 	});
 
 	function pilih(n: number): void {
+		setActiveFrame(null);
 		setPhotoCount(n);
 		pusatkan(n, true);
+	}
+
+	function pilihFrame(frame: PhotoFrame): void {
+		setActiveFrame(frame);
 	}
 
 	function handleAmbil(): void {
@@ -198,6 +232,7 @@
 <section
 	class="strip-select-screen screen-enter kiosk-scope"
 	class:theme-light={$session.theme === 'light'}
+	class:frame-mode={tab === 'frame'}
 	aria-label="Pilih jumlah foto"
 	bind:this={sectionEl}
 >
@@ -225,113 +260,142 @@
 	<ThemeToggle />
 
 	<header class="kepala">
-		<h2 class="judul font-display">BERAPA FOTO?</h2>
-	</header>
-
-	<div class="deck" bind:this={deckGulir}>
-		{#each JUMLAH as n, i (n)}
+		<h2 class="judul font-display">{tab === 'frame' ? 'PILIH FRAME' : 'BERAPA FOTO?'}</h2>
+		<div class="mode-tabs" role="tablist" aria-label="Jenis strip">
 			<button
 				type="button"
-				class="deck-item"
-				class:aktif={$session.photoCount === n}
-				onclick={() => pilih(n)}
-				aria-label="Strip {n} foto"
-				aria-pressed={$session.photoCount === n}
+				class="mode-tab font-mono"
+				class:is-active={tab === 'frame'}
+				onclick={() => (tab = 'frame')}
+				role="tab"
+				aria-selected={tab === 'frame'}
 			>
-				<span class="mini" aria-hidden="true">
-					<canvas class="mini-kanvas" width="90" height="270" bind:this={deckCanvases[i]}></canvas>
-				</span>
-				<span class="mini-label font-mono" aria-hidden="true">{n}</span>
-			</button>
-		{/each}
-	</div>
-
-	<figure class="produk" bind:this={produkEl}>
-		<div class="etalase-bingkai">
-			<div
-				class="etalase"
-				bind:this={etalaseEl}
-				onscroll={saatGulir}
-				style="padding-inline:{padEtalase}px"
-			>
-				{#each ukuran as u, i (u.n)}
-					<div
-						class="slide"
-						class:aktif={$session.photoCount === u.n}
-						aria-hidden={$session.photoCount !== u.n}
-						style="width:{Math.round(slotLebar)}px;height:{Math.round(tinggi)}px"
-						bind:this={slideEls[i]}
-					>
-						<span
-							class="kertas"
-							role="img"
-							aria-label="Pratinjau {produk(u.n).nama}, {u.n} foto"
-							style="width:{Math.round(u.w)}px;height:{Math.round(u.h)}px"
-						>
-							<canvas
-								class="pratinjau"
-								aria-hidden="true"
-								width={Math.round(produk(u.n).pxW / 2)}
-								height={Math.round(produk(u.n).pxH / 2)}
-								bind:this={etalaseCanvases[i]}
-							></canvas>
-						</span>
-					</div>
-				{/each}
-			</div>
-
-			<button
-				type="button"
-				class="panah kiri"
-				onclick={() => pilih($session.photoCount - 1)}
-				disabled={$session.photoCount <= 1}
-				aria-label="Produk sebelumnya"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					width="17"
-					height="17"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.4"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M15 5l-7 7 7 7" />
-				</svg>
+				FRAME
 			</button>
 			<button
 				type="button"
-				class="panah kanan"
-				onclick={() => pilih($session.photoCount + 1)}
-				disabled={$session.photoCount >= 6}
-				aria-label="Produk berikutnya"
+				class="mode-tab font-mono"
+				class:is-active={tab === 'klasik'}
+				onclick={() => (tab = 'klasik')}
+				role="tab"
+				aria-selected={tab === 'klasik'}
 			>
-				<svg
-					viewBox="0 0 24 24"
-					width="17"
-					height="17"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.4"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M9 5l7 7-7 7" />
-				</svg>
+				KLASIK
 			</button>
 		</div>
-		<span
-			class="pijakan"
-			aria-hidden="true"
-			style="width:{Math.round(ukuran[$session.photoCount - 1].w * 1.45)}px"
-		></span>
+	</header>
 
-		<figcaption class="ket font-mono">
-			{produk($session.photoCount).nama.toUpperCase()} · {$session.photoCount} FOTO
-		</figcaption>
+	{#if tab === 'klasik'}
+		<div class="deck" bind:this={deckGulir}>
+			{#each JUMLAH as n, i (n)}
+				<button
+					type="button"
+					class="deck-item"
+					class:aktif={$session.photoCount === n}
+					onclick={() => pilih(n)}
+					aria-label="Strip {n} foto"
+					aria-pressed={$session.photoCount === n}
+				>
+					<span class="mini" aria-hidden="true">
+						<canvas class="mini-kanvas" width="90" height="270" bind:this={deckCanvases[i]}
+						></canvas>
+					</span>
+					<span class="mini-label font-mono" aria-hidden="true">{n}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
+
+	<figure class="produk" bind:this={produkEl}>
+		{#if tab === 'frame'}
+			<FramePicker onSelect={pilihFrame} selectedId={$session.activeFrame?.id ?? null} />
+		{:else}
+			<div class="etalase-bingkai">
+				<div
+					class="etalase"
+					bind:this={etalaseEl}
+					onscroll={saatGulir}
+					style="padding-inline:{padEtalase}px"
+				>
+					{#each ukuran as u, i (u.n)}
+						<div
+							class="slide"
+							class:aktif={$session.photoCount === u.n}
+							aria-hidden={$session.photoCount !== u.n}
+							style="width:{Math.round(slotLebar)}px;height:{Math.round(tinggi)}px"
+							bind:this={slideEls[i]}
+						>
+							<span
+								class="kertas"
+								role="img"
+								aria-label="Pratinjau {produk(u.n).nama}, {u.n} foto"
+								style="width:{Math.round(u.w)}px;height:{Math.round(u.h)}px"
+							>
+								<canvas
+									class="pratinjau"
+									aria-hidden="true"
+									width={Math.round(produk(u.n).pxW / 2)}
+									height={Math.round(produk(u.n).pxH / 2)}
+									bind:this={etalaseCanvases[i]}
+								></canvas>
+							</span>
+						</div>
+					{/each}
+				</div>
+
+				<button
+					type="button"
+					class="panah kiri"
+					onclick={() => pilih($session.photoCount - 1)}
+					disabled={$session.photoCount <= 1}
+					aria-label="Produk sebelumnya"
+				>
+					<svg
+						viewBox="0 0 24 24"
+						width="17"
+						height="17"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M15 5l-7 7 7 7" />
+					</svg>
+				</button>
+				<button
+					type="button"
+					class="panah kanan"
+					onclick={() => pilih($session.photoCount + 1)}
+					disabled={$session.photoCount >= 6}
+					aria-label="Produk berikutnya"
+				>
+					<svg
+						viewBox="0 0 24 24"
+						width="17"
+						height="17"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M9 5l7 7-7 7" />
+					</svg>
+				</button>
+			</div>
+			<span
+				class="pijakan"
+				aria-hidden="true"
+				style="width:{Math.round((ukuran[safePhotoCount - 1]?.w || 0) * 1.45)}px"
+			></span>
+
+			<figcaption class="ket font-mono">
+				{produk(safePhotoCount).nama.toUpperCase()} · {$session.photoCount} FOTO
+			</figcaption>
+		{/if}
 	</figure>
 
 	<div class="aksi">
@@ -339,6 +403,7 @@
 			type="button"
 			class="ambil-cta btn font-mono"
 			onclick={handleAmbil}
+			disabled={tab === 'frame' && !$session.activeFrame}
 			aria-label="Ambil foto sekarang"
 		>
 			AMBIL FOTO

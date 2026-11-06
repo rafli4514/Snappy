@@ -4,11 +4,11 @@
 	import { session } from '#lib/stores/session';
 	import EditorScreen from '#lib/page/editor/EditorScreen.svelte';
 
-	// Guard: editor butuh set foto yang lengkap.
+	// Guard: editor butuh N foto yang sudah dipilih dari burst.
 	onMount(() => {
-		const photos = $session.photos;
-		if (photos.length === 0) void goto('/', { replace: true });
-		else if (photos.length < $session.photoCount) void goto('/review', { replace: true });
+		if ($session.photos.length === 0) void goto('/', { replace: true });
+		else if ($session.selectedPhotoIndices.length !== $session.photoCount)
+			void goto('/review', { replace: true });
 	});
 </script>
 

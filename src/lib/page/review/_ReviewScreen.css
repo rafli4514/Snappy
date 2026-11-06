@@ -18,11 +18,21 @@
 	--card-shadow: 0 14px 30px rgba(28, 25, 23, 0.14);
 }
 
-/* ── Kepala: judul saja, di tengah seperti referensi ── */
+/* ── Kepala: judul + penghitung pilihan ── */
 .review-head {
 	display: grid;
-	place-items: center;
+	justify-items: center;
+	gap: 6px;
 	padding: clamp(20px, 3.4dvh, 34px) clamp(16px, 3vw, 28px) 0;
+	text-align: center;
+}
+
+.review-kicker {
+	margin: 0;
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.24em;
+	color: var(--fg-dim);
 }
 
 .review-title {
@@ -34,7 +44,27 @@
 	text-align: center;
 }
 
-/* ── Isi: grid foto di tengah, boleh gulir bila 6 foto ── */
+.review-counter {
+	margin: 2px 0 0;
+	font-size: 0.7rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	color: var(--fg-dim);
+}
+
+.review-counter strong {
+	color: var(--fg);
+	font-weight: 800;
+}
+
+.review-hint {
+	margin: 0;
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	color: var(--fg-dim);
+}
+
+/* ── Isi: grid foto burst, boleh gulir ── */
 .review-body {
 	padding: clamp(22px, 3.6dvh, 40px) clamp(20px, 4vw, 36px);
 	overflow-y: auto;
@@ -42,50 +72,21 @@
 
 .photo-grid {
 	display: grid;
-	gap: clamp(18px, 2.4vw, 26px);
+	grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+	gap: clamp(12px, 1.6vw, 20px);
 	width: 100%;
-	max-width: 1020px;
+	max-width: 1080px;
 	margin: 0 auto;
 	padding-bottom: 8px;
 }
 
-.grid-1 {
-	grid-template-columns: 1fr;
-	max-width: 480px;
-}
-.grid-2 {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	max-width: 780px;
-}
-.grid-3 {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	max-width: 1020px;
-}
-.grid-4 {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	max-width: 780px;
-}
-.grid-5 {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	max-width: 780px;
-}
-.grid-6 {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	max-width: 1020px;
-}
-
-@media (min-width: 640px) {
-	.grid-4 {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		max-width: 780px;
-	}
-	.grid-5 {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		max-width: 900px;
+@media (min-width: 900px) {
+	.photo-grid {
+		grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 	}
 }
 
-/* ── Aksi bawah: ambil ulang semua · CTA kapsul ── */
+/* ── Aksi bawah: pilihan otomatis · ambil ulang semua · CTA kapsul ── */
 .review-actions {
 	display: flex;
 	align-items: center;
@@ -96,6 +97,14 @@
 	padding-bottom: max(14px, env(safe-area-inset-bottom));
 	border-top: 1px solid var(--ring-line);
 	background: var(--bg);
+}
+
+.actions-left {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: center;
 }
 
 .ghost-cta {
@@ -182,6 +191,15 @@
 	flex-shrink: 0;
 }
 
+.capsule-cta:disabled {
+	opacity: 0.35;
+	cursor: default;
+	transform: none;
+	box-shadow: none;
+	background: var(--fg);
+	color: var(--bg);
+}
+
 /* ── Ponsel: aksi mengalir dua baris, CTA tetap menonjol ── */
 @media (max-width: 480px) {
 	.review-actions {
@@ -191,6 +209,9 @@
 		flex-basis: 100%;
 		max-width: none;
 		order: -1;
+	}
+	.actions-left {
+		width: 100%;
 	}
 	.ghost-cta {
 		flex: 1;

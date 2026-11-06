@@ -1,0 +1,4 @@
+<!-- Frame assets placeholder -->
+<!-- Place 24 WebP files here: template-{id}.webp (IDs 2-25, skipping 1) -->
+<!-- All frames are 591x1772 VP8X (alpha, ICCP) -->
+<!-- Categories: Cartoon, Modern, Music, Newspaper -->

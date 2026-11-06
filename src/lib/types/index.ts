@@ -41,7 +41,14 @@ export interface SessionState {
 	cameraError: string | null;
 	isCapturing: boolean;
 	captureProgress: number;
+	/** Foto yang dipakai strip (= jumlah slot frame aktif, 1–6). */
 	photoCount: number;
+	/** Berapa kali kamera menjepret (burst), terpisah dari jumlah slot. */
+	burstCount: number;
+	/** Frame unggahan yang aktif; null = pakai template klasik. */
+	activeFrame: PhotoFrame | null;
+	/** Index foto burst yang dipakai, urut kronologis. Panjang = photoCount. */
+	selectedPhotoIndices: number[];
 	customTemplateData: CustomTemplate | null;
 	theme: KioskTheme;
 	cameraSettings: CameraSettings;
@@ -51,6 +58,29 @@ export interface SessionState {
 	stickers: StickerLayer[];
 	/** Active color filter for the strip (editor edit screen). */
 	photoFilter: string | null;
+	/** Mirror horizontal preview — default ON per booth spec. */
+	flipHorizontal: boolean;
+}
+
+// ─── Uploaded photo frames (Canva artwork + detected holes) ──────────────────
+
+export interface PhotoFrame {
+	id: string;
+	name: string;
+	/** Jumlah lubang foto; juga menentukan PRODUK cetak. */
+	slotCount: number;
+	/** Ukuran canvas asli artwork (px). */
+	designWidth: number;
+	designHeight: number;
+	/** PNG atau SVG data URL. */
+	artworkDataUrl: string;
+	/** Slot ternormalisasi 0..1 hasil deteksi. */
+	slots: CustomSlot[];
+	/** Titik fokus crop default untuk slot portrait. */
+	focal: 'center' | 'top';
+	source: 'upload' | 'seed';
+	createdAt: number;
+	updatedAt: number;
 }
 
 // ─── Custom templates (IndexedDB / localStorage persisted) ───────────────────
@@ -242,6 +272,8 @@ export interface RenderOptions {
 	photoFilter?: string | null;
 	/** Index slot yang sedang terpilih di strip (indikator edit screen). */
 	selectedSlot?: number | null;
+	/** Jumlah salinan di lembar cetak; default mengikuti `PRODUK[n].copySheet`. */
+	copies?: number;
 }
 
 // ─── Gallery sessions ────────────────────────────────────────────────────────

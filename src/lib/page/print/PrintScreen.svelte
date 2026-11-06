@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { session, goTo, resetSession } from '#lib/stores/session';
+	import { onMount, tick } from 'svelte';
+	import { session, goTo, resetSession, stripPhotos } from '#lib/stores/session';
 	import { PRODUK, renderExportCanvas } from '#lib/utils/canvas';
+	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { downloadStripPNG, printStrip } from '#lib/utils/export';
 	import {
 		saveGallerySession,
@@ -25,18 +26,30 @@
 	let copiedUrl = false;
 	let showPrinterInfo = false;
 
-	$: photos = $session.photos;
+	$: photos = $stripPhotos;
 	$: templateKey = $session.selectedTemplate;
 	$: customTemplateData = $session.customTemplateData;
+	$: activeFrame = $session.activeFrame;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
 
-	$: activeTemplate = customTemplateData || templateKey;
+	$: activeTemplate = activeFrame
+		? frameToTemplate(activeFrame)
+		: customTemplateData || templateKey;
 
 	// Produk aktif = ukuran cetak nyata per jumlah foto
 	$: produk = PRODUK[$session.photoCount] || PRODUK[4];
 	$: sheetLandscape = produk.sheetOrient === 'landscape';
-	$: copies = produk.copySheet;
+	// Salinan bisa dipilih tamu untuk produk Two up; produk lain tetap 1.
+	let copiesChoice: number | null = null;
+	$: copies = Math.min(copiesChoice ?? produk.copySheet, produk.copySheet);
+
+	async function setCopies(n: number): Promise<void> {
+		if (n === copies) return;
+		copiesChoice = n;
+		await tick();
+		await drawSheetPreview();
+	}
 
 	onMount(async () => {
 		// Generate QR instantly without waiting for sheet canvas render
@@ -47,7 +60,11 @@
 	async function drawSheetPreview(): Promise<void> {
 		if (!previewCanvas) return;
 		try {
-			const fullCanvas = await renderExportCanvas(photos, activeTemplate, { caption, showDate });
+			const fullCanvas = await renderExportCanvas(photos, activeTemplate, {
+				caption,
+				showDate,
+				copies
+			});
 			previewCanvas.width = fullCanvas.width > fullCanvas.height ? 600 : 400;
 			previewCanvas.height = fullCanvas.width > fullCanvas.height ? 400 : 600;
 			const ctx = previewCanvas.getContext('2d');
@@ -78,7 +95,8 @@
 					try {
 						const exportCanvas = await renderExportCanvas(photos, activeTemplate, {
 							caption,
-							showDate
+							showDate,
+							copies
 						});
 						stripDataUrl = exportCanvas.toDataURL('image/png');
 					} catch (ce) {
@@ -107,7 +125,7 @@
 		isPrinting = true;
 		printError = null;
 		try {
-			await printStrip(photos, activeTemplate, { caption, showDate });
+			await printStrip(photos, activeTemplate, { caption, showDate, copies });
 		} catch (err) {
 			console.error('Print error:', err);
 			printError = 'Unable to open print dialog. Try downloading the PNG instead.';
@@ -121,7 +139,7 @@
 		isDownloading = true;
 		printError = null;
 		try {
-			await downloadStripPNG(photos, activeTemplate, { caption, showDate });
+			await downloadStripPNG(photos, activeTemplate, { caption, showDate, copies });
 			downloadSuccess = true;
 			setTimeout(() => {
 				downloadSuccess = false;
@@ -337,6 +355,31 @@
 			</div>
 
 			<!-- 2. Action Buttons Below QR: Cetak + Info icon (i) + Download PNG -->
+			{#if produk.copySheet > 1}
+				<div class="copies-choice" role="group" aria-label="Jumlah salinan cetak">
+					<span class="copies-label font-mono">JUMLAH SALINAN</span>
+					<div class="copies-buttons">
+						<button
+							type="button"
+							class="copies-btn font-mono"
+							class:is-active={copies === 1}
+							on:click={() => setCopies(1)}
+							aria-pressed={copies === 1}
+						>
+							1 SALINAN
+						</button>
+						<button
+							type="button"
+							class="copies-btn font-mono"
+							class:is-active={copies === 2}
+							on:click={() => setCopies(2)}
+							aria-pressed={copies === 2}
+						>
+							2 SALINAN
+						</button>
+					</div>
+				</div>
+			{/if}
 			<div class="print-actions-wrapper">
 				<div class="print-btn-with-info">
 					<button
@@ -808,6 +851,62 @@
 	}
 
 	/* ── 2. Action Buttons Below QR: Matches QR width ── */
+	.copies-choice {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		width: 100%;
+		padding: 10px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-surface);
+	}
+
+	.copies-label {
+		font-size: 0.58rem;
+		font-weight: 800;
+		letter-spacing: 0.2em;
+		color: var(--color-ink-light);
+	}
+
+	.copies-buttons {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 6px;
+	}
+
+	.copies-btn {
+		min-height: 40px;
+		padding: 0 10px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-full);
+		background: transparent;
+		color: var(--color-ink);
+		font-size: 0.62rem;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		cursor: pointer;
+		transition:
+			background-color 160ms ease,
+			color 160ms ease,
+			border-color 160ms ease;
+	}
+
+	.copies-btn:hover {
+		border-color: var(--color-ink);
+	}
+
+	.copies-btn.is-active {
+		background: var(--color-ink);
+		border-color: var(--color-ink);
+		color: var(--color-surface);
+	}
+
+	.copies-btn:focus-visible {
+		outline: 2.5px solid var(--color-accent);
+		outline-offset: 3px;
+	}
+
 	.print-actions-wrapper {
 		display: flex;
 		flex-direction: column;

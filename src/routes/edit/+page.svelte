@@ -6,9 +6,9 @@
 
 	// Guard: halaman edit butuh set foto yang lengkap (sama seperti editor).
 	onMount(() => {
-		const photos = $session.photos;
-		if (photos.length === 0) void goto('/', { replace: true });
-		else if (photos.length < $session.photoCount) void goto('/review', { replace: true });
+		if ($session.photos.length === 0) void goto('/', { replace: true });
+		else if ($session.selectedPhotoIndices.length !== $session.photoCount)
+			void goto('/review', { replace: true });
 	});
 </script>
 

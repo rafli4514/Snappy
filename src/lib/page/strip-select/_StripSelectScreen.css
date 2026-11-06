@@ -463,6 +463,68 @@
 	}
 }
 
+/* ── Tab mode: frame unggahan vs strip klasik ── */
+.mode-tabs {
+	display: flex;
+	justify-content: center;
+	gap: 8px;
+	margin-top: clamp(10px, 1.6dvh, 18px);
+}
+
+.mode-tab {
+	min-height: 38px;
+	padding: 0 18px;
+	border: 1px solid var(--hairline);
+	border-radius: var(--radius-full);
+	background: transparent;
+	color: var(--fg-dim);
+	font-size: 0.6rem;
+	font-weight: 700;
+	letter-spacing: 0.2em;
+	cursor: pointer;
+	outline: none;
+	transition:
+		color 160ms ease,
+		border-color 160ms ease,
+		background-color 160ms ease;
+}
+
+.mode-tab:hover {
+	color: var(--fg);
+	border-color: var(--fg);
+}
+
+.mode-tab.is-active {
+	background: var(--fg);
+	border-color: var(--fg);
+	color: var(--bg);
+}
+
+.mode-tab:focus-visible {
+	outline: 2.5px solid var(--focus);
+	outline-offset: 3px;
+}
+
+/* Mode frame: rak klasik tidak tampil, poros produk memakai penuh lebar */
+.strip-select-screen.frame-mode {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.strip-select-screen.frame-mode .kepala,
+.strip-select-screen.frame-mode .produk,
+.strip-select-screen.frame-mode .aksi {
+	grid-column: 1;
+}
+
+.ambil-cta:disabled {
+	opacity: 0.35;
+	cursor: default;
+	transform: none;
+	box-shadow: none;
+	background-color: var(--color-primary);
+	color: var(--color-primary-content);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.strip-select-screen,
 	.back-btn,

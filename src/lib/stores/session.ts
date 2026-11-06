@@ -11,6 +11,7 @@ import type {
 	CameraSettings,
 	CustomTemplate,
 	KioskTheme,
+	PhotoFrame,
 	PhotoTransform,
 	Screen,
 	SessionState,
@@ -23,7 +24,7 @@ const CAMERA_SETTINGS_KEY = 'distudio-camera-settings';
 
 const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
 	theme: 'clean',
-	timer: 0,
+	timer: 3, // PhotoDefaultIntervalCapture = 3 seconds
 	flash: 'off',
 	filter: 'none',
 	grid: 'none'
@@ -60,20 +61,39 @@ export const session = writable<SessionState>({
 	cameraError: null,
 	isCapturing: false,
 	captureProgress: 0,
-	photoCount: 4,
+	photoCount: 4, // jumlah slot strip (1–6)
+	burstCount: 10, // PhotoDefaultPhotosTaken = 10
+	activeFrame: null,
+	selectedPhotoIndices: [],
 	customTemplateData: null,
 	theme: initialTheme(),
 	cameraSettings: initialCameraSettings(),
 	photoTransforms: [],
 	stickers: [],
-	photoFilter: 'none'
+	photoFilter: 'none',
+	flipHorizontal: true // PhotoDefaultFlipHorizontal = 1
 });
 
 /** Derived: is a photo set complete? */
 export const isPhotoSetComplete = derived(
 	session,
-	($s) => $s.photos.length === $s.photoCount && $s.photos.every(Boolean)
+	($s) =>
+		$s.photos.length >= $s.burstCount &&
+		$s.selectedPhotoIndices.length === $s.photoCount &&
+		$s.photos.every(Boolean)
 );
+
+/**
+ * Foto yang masuk strip: pilihan tamu bila ada, kalau belum
+ * jatuh ke N foto pertama supaya preview tetap terisi.
+ */
+export const stripPhotos = derived(session, ($s) => {
+	const picked = $s.selectedPhotoIndices
+		.map((i) => $s.photos[i])
+		.filter((p): p is string => Boolean(p));
+	if (picked.length) return picked;
+	return $s.photos.slice(0, $s.photoCount);
+});
 
 // ─── Action Functions ───────────────────────────────────────────────────────
 
@@ -131,6 +151,7 @@ export function beginCapture(): void {
 	session.update((s) => ({
 		...s,
 		photos: [],
+		selectedPhotoIndices: [],
 		retakeIndex: null,
 		isCapturing: true,
 		captureProgress: 0,
@@ -149,43 +170,67 @@ export function addPhoto(dataUrl: string): void {
 		} else {
 			photos.push(dataUrl);
 		}
+		const burstDone = s.retakeIndex === null && photos.length >= s.burstCount;
+		const selectedPhotoIndices =
+			burstDone && s.selectedPhotoIndices.length === 0
+				? evenIndices(photos.length, s.photoCount)
+				: s.selectedPhotoIndices;
 		return {
 			...s,
 			photos,
+			selectedPhotoIndices,
 			captureProgress: s.retakeIndex !== null ? s.captureProgress : photos.length
 		};
 	});
 }
 
-/** Swap position of two photos in the session */
+/**
+ * Urutan strip = `selectedPhotoIndices`. Reorder mengubah larik itu supaya
+ * foto yang tampil di editor benar-benar bertukar tempat; tanpa pilihan
+ * (sesi lama) jatuh ke larik `photos`.
+ */
+function reorderStrip(
+	s: SessionState,
+	mutate: (order: (number | string)[]) => (number | string)[]
+): SessionState {
+	if (s.selectedPhotoIndices.length > 1) {
+		const order = mutate([...s.selectedPhotoIndices]) as number[];
+		return { ...s, selectedPhotoIndices: order };
+	}
+	const photos = [...s.photos];
+	mutate(photos);
+	return { ...s, photos };
+}
+
+/** Swap position of two photos in the strip order */
 export function swapPhotos(index1: number, index2: number): void {
-	session.update((s) => {
-		const photos = [...s.photos];
-		if (index1 >= 0 && index1 < photos.length && index2 >= 0 && index2 < photos.length) {
-			const temp = photos[index1];
-			photos[index1] = photos[index2];
-			photos[index2] = temp;
-		}
-		return { ...s, photos };
-	});
+	session.update((s) =>
+		reorderStrip(s, (order) => {
+			if (index1 >= 0 && index1 < order.length && index2 >= 0 && index2 < order.length) {
+				[order[index1], order[index2]] = [order[index2], order[index1]];
+			}
+			return order;
+		})
+	);
 }
 
 /** Move a photo from one position to another (drag and drop reordering) */
 export function movePhoto(fromIndex: number, toIndex: number): void {
-	session.update((s) => {
-		const photos = [...s.photos];
-		if (
-			fromIndex >= 0 &&
-			fromIndex < photos.length &&
-			toIndex >= 0 &&
-			toIndex < photos.length &&
-			fromIndex !== toIndex
-		) {
-			const [moved] = photos.splice(fromIndex, 1);
-			photos.splice(toIndex, 0, moved);
-		}
-		return { ...s, photos };
-	});
+	session.update((s) =>
+		reorderStrip(s, (order) => {
+			if (
+				fromIndex >= 0 &&
+				fromIndex < order.length &&
+				toIndex >= 0 &&
+				toIndex < order.length &&
+				fromIndex !== toIndex
+			) {
+				const [moved] = order.splice(fromIndex, 1);
+				order.splice(toIndex, 0, moved);
+			}
+			return order;
+		})
+	);
 }
 
 /** Mark a specific photo slot for retake */
@@ -199,6 +244,10 @@ export function finishCapture(): void {
 		...s,
 		isCapturing: false,
 		retakeIndex: null,
+		selectedPhotoIndices:
+			s.selectedPhotoIndices.length === s.photoCount
+				? s.selectedPhotoIndices
+				: evenIndices(s.photos.length, s.photoCount),
 		screen: 'review'
 	}));
 	void goto(SCREEN_PATH.review);
@@ -222,7 +271,64 @@ export function toggleDate(): void {
 /** Set photo count (1–6) — ranges outside are guarded */
 export function setPhotoCount(count: number): void {
 	const safe = Math.min(6, Math.max(1, Math.round(count)));
-	session.update((s) => ({ ...s, photoCount: safe }));
+	session.update((s) => ({
+		...s,
+		photoCount: safe,
+		selectedPhotoIndices: s.selectedPhotoIndices.slice(0, safe)
+	}));
+}
+
+/** Pilih N index foto burst dengan jarak merata (0, 3, 6, 9 untuk 4 dari 10). */
+function evenIndices(total: number, take: number): number[] {
+	if (total <= 0 || take <= 0) return [];
+	const n = Math.min(take, total);
+	if (n === 1) return [Math.floor((total - 1) / 2)];
+	return Array.from({ length: n }, (_, i) => Math.round((i * (total - 1)) / (n - 1)));
+}
+
+/** Pasang frame aktif; jumlah slot menentukan photoCount. */
+export function setActiveFrame(frame: PhotoFrame | null): void {
+	session.update((s) => {
+		if (!frame) {
+			return { ...s, activeFrame: null, selectedPhotoIndices: [] };
+		}
+		const slotCount = Math.min(6, Math.max(1, frame.slots.length));
+		const selectedPhotoIndices = s.photos.length ? evenIndices(s.photos.length, slotCount) : [];
+		return {
+			...s,
+			activeFrame: frame,
+			photoCount: slotCount,
+			customTemplateData: null,
+			selectedPhotoIndices
+		};
+	});
+}
+
+/** Pilih ulang foto otomatis (jarak merata) dari burst yang tersedia. */
+export function autoSelectPhotos(): void {
+	session.update((s) => ({
+		...s,
+		selectedPhotoIndices: evenIndices(s.photos.length, s.photoCount)
+	}));
+}
+
+/** Tambah/lepas satu foto dari pilihan; batas = photoCount. */
+export function toggleSelectedPhoto(index: number): void {
+	session.update((s) => {
+		const current = s.selectedPhotoIndices;
+		if (current.includes(index)) {
+			return { ...s, selectedPhotoIndices: current.filter((i) => i !== index) };
+		}
+		if (current.length >= s.photoCount) return s;
+		return {
+			...s,
+			selectedPhotoIndices: [...current, index].sort((a, b) => a - b)
+		};
+	});
+}
+
+export function clearSelectedPhotos(): void {
+	session.update((s) => ({ ...s, selectedPhotoIndices: [] }));
 }
 
 /** Set per-photo edit transform (rotation / flip / zoom) — edit screen */
@@ -337,12 +443,16 @@ export function resetSession(): void {
 		isCapturing: false,
 		captureProgress: 0,
 		photoCount: 4,
+		burstCount: 10,
+		activeFrame: null,
+		selectedPhotoIndices: [],
 		customTemplateData: null,
 		theme: currentTheme || 'light',
 		cameraSettings: currentCameraSettings || { ...DEFAULT_CAMERA_SETTINGS },
 		photoTransforms: [],
 		stickers: [],
-		photoFilter: 'none'
+		photoFilter: 'none',
+		flipHorizontal: true
 	});
 	void goto(SCREEN_PATH.start);
 }

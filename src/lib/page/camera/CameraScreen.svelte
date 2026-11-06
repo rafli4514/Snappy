@@ -108,11 +108,12 @@
 	let shutterAnimId: number | null = null;
 	let lastPhotoUrl: string | null = null;
 
-	$: photoCount = $session.photoCount;
+	$: burstCount = $session.burstCount;
 	$: retakeIndex = $session.retakeIndex;
 	$: isSingleRetake = $session.retakeIndex !== null;
 	$: cam = $session.cameraSettings;
 	$: activeTheme = cam.theme;
+	$: flipCss = $session.flipHorizontal ? 'scaleX(-1)' : ('none' as any);
 	$: filterCss = FILTER_CSS[cam.filter];
 
 	$: timerLabel = TIMER_LABELS[cam.timer];
@@ -256,7 +257,8 @@
 
 		isSessionActive = true;
 		currentPhotoNum = retakeIndex !== null ? retakeIndex + 1 : 1;
-		const totalShots = retakeIndex !== null ? 1 : photoCount;
+		// Burst penuh; jumlah slot frame hanya menentukan berapa yang dipakai.
+		const totalShots = retakeIndex !== null ? 1 : burstCount;
 		const waitSec = get(session).cameraSettings.timer;
 
 		for (let i = 0; i < totalShots; i++) {
@@ -405,11 +407,11 @@
 
 			<span class="shot-counter" role="status">
 				{#if isSessionActive}
-					#{currentPhotoNum} / {isSingleRetake ? 1 : photoCount}
+					#{currentPhotoNum} / {isSingleRetake ? 1 : burstCount}
 				{:else if isSingleRetake}
 					Retake #{(retakeIndex ?? 0) + 1}
 				{:else}
-					{photoCount} Shots
+					{burstCount} Shots
 				{/if}
 			</span>
 
@@ -456,6 +458,7 @@
 					bind:this={videoEl}
 					class="video-feed"
 					style:filter={filterCss}
+					style:transform={flipCss}
 					autoplay
 					muted
 					playsinline
@@ -564,7 +567,7 @@
 
 			<p class="session-hint" role="status" aria-live="polite">
 				{#if isSessionActive && countdownValue === null}
-					#{currentPhotoNum} / {isSingleRetake ? 1 : photoCount}
+					#{currentPhotoNum} / {isSingleRetake ? 1 : burstCount}
 				{/if}
 			</p>
 		</footer>

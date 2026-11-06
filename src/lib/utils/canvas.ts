@@ -941,7 +941,8 @@ export async function renderExportCanvas(
 
 	const SHEET_W = landscape ? 1800 : 1200;
 	const SHEET_H = landscape ? 1200 : 1800;
-	const copies = p.copySheet;
+	// Jumlah salinan bisa dipilih tamu (frame 2-slot), dibatasi kapasitas produk.
+	const copies = Math.max(1, Math.min(Math.round(options.copies ?? p.copySheet), p.copySheet));
 
 	// Semua salinan dicetak UKURAN SEJATI (px 300 DPI = cm asli), di tengah
 	// lembar. Gap 16 px hanya antar 2 salinan Two up (591×2 + 16 = 1198 ≤ 1200).
