@@ -1,78 +1,17 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import {
-		session,
-		goTo,
-		setFormat,
-		setPhotoCount,
-		setActiveFrame,
-		setCustomTemplate
-	} from '#lib/stores/session';
-	import { listFrames } from '#lib/utils/frameStorage';
+	import { session, goTo, setFormat, setPhotoCount } from '#lib/stores/session';
 	import { STANDARD_FORMATS, formatById } from '#lib/data/standardFormats';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
-	import type { PhotoFrame } from '#lib/types';
-
-	const PRESET_KEY = 'distudio-standard-presets';
-
-	let frames = $state<PhotoFrame[]>([]);
-	let presetOn = $state<Record<string, boolean>>({});
-	let selectedDesignId = $state<string | null>(null);
 
 	const format = $derived(formatById($session.formatId));
 	const allowedCounts = $derived(format.photos);
-	const designs = $derived.by(() => {
-		const out: { id: string; label: string; thumb: string | null; frame: PhotoFrame | null }[] = [];
-		if (presetOn[$session.formatId] ?? true) {
-			out.push({ id: 'builtin-classic', label: 'Classic', thumb: null, frame: null });
-		}
-		for (const f of frames) {
-			if (f.formatId !== $session.formatId) continue;
-			if (f.enabled === false) continue;
-			if (f.slotCount !== $session.photoCount) continue;
-			out.push({ id: f.id, label: f.name, thumb: f.artworkDataUrl, frame: f });
-		}
-		return out;
-	});
-
-	// Sinkronkan pilihan desain dengan state sesi saat format/count berubah.
-	$effect(() => {
-		const af = $session.activeFrame;
-		if (af && af.formatId === $session.formatId) {
-			selectedDesignId = af.id;
-		} else if (af === null && $session.customTemplateData === null) {
-			selectedDesignId = 'builtin-classic';
-		}
-	});
-
-	onMount(async () => {
-		frames = await listFrames();
-		try {
-			const raw = localStorage.getItem(PRESET_KEY);
-			if (raw) presetOn = JSON.parse(raw) as Record<string, boolean>;
-		} catch {
-			/* ignore */
-		}
-	});
 
 	function chooseFormat(id: string): void {
 		setFormat(id);
-		selectedDesignId = null;
 	}
 
 	function chooseCount(n: number): void {
 		setPhotoCount(n);
-		selectedDesignId = null;
-	}
-
-	function chooseDesign(design: { id: string; frame: PhotoFrame | null }): void {
-		selectedDesignId = design.id;
-		if (design.frame) {
-			setActiveFrame(design.frame);
-		} else {
-			setActiveFrame(null);
-			setCustomTemplate(null);
-		}
 	}
 
 	function handleAmbil(): void {
@@ -123,7 +62,11 @@
 				aria-selected={$session.formatId === f.id}
 				aria-label={`${f.label}, ${f.cm}`}
 			>
-				<span class="format-thumb" style="height: {Math.round(124 * f.pxH / f.pxW)}px;" aria-hidden="true">
+				<span
+					class="format-thumb"
+					style="height: {Math.round((124 * f.pxH) / f.pxW)}px;"
+					aria-hidden="true"
+				>
 					<span class="format-thumb-label">{f.label.split('·')[0].trim()}</span>
 				</span>
 				<span class="format-meta">
@@ -146,28 +89,6 @@
 				aria-pressed={$session.photoCount === n}
 			>
 				{n} FOTO
-			</button>
-		{/each}
-	</div>
-
-	<div class="design-grid" role="list">
-		{#each designs as d (d.id)}
-			<button
-				type="button"
-				class="design-card"
-				class:is-active={selectedDesignId === d.id}
-				onclick={() => chooseDesign(d)}
-				aria-pressed={selectedDesignId === d.id}
-				aria-label={d.label}
-			>
-				{#if d.thumb}
-					<img src={d.thumb} alt="" class="design-thumb" />
-				{:else}
-					<span class="design-thumb design-thumb--builtin">
-						<span>Classic</span>
-					</span>
-				{/if}
-				<span class="design-name">{d.label}</span>
 			</button>
 		{/each}
 	</div>

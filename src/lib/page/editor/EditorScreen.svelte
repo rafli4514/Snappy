@@ -3,20 +3,13 @@
 	import {
 		session,
 		goTo,
-		setCustomTemplate,
-		selectBuiltinTemplate,
 		swapPhotos,
 		movePhoto,
 		stripPhotos,
 		setActiveFrame
 	} from '#lib/stores/session';
-	import { PRODUK, TEMPLATES, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
+	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
-	import TemplateThumb from '#lib/features/editor/TemplateThumb.svelte';
-	import CustomTemplateBuilder from '#lib/features/editor/CustomTemplateBuilder.svelte';
-	import TemplateLibraryModal from '#lib/features/editor/TemplateLibraryModal.svelte';
-	import { getAllCustomTemplates } from '#lib/utils/customTemplateStorage';
-	import type { CustomTemplate } from '#lib/types';
 	import type { PhotoFrame } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -34,30 +27,12 @@
 		: customTemplateData || $session.selectedTemplate;
 	$: product = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
-	// ── Panel kanan: preset kertas bawaan · template buatan sendiri · frame tersimpan ──
-	type PanelTab = 'preset' | 'mine';
-	let activeTab: PanelTab = 'preset';
-
-	$: presets = Object.values(TEMPLATES).map((t) => ({ key: t.id, label: t.label }));
-
-	let customTemplatesList: CustomTemplate[] = [];
+	// ── Panel kanan: hanya template admin (frame tersimpan) ──
 	let savedFramesList: PhotoFrame[] = [];
-	$: userTemplates = customTemplatesList.map((template) => {
-		const slotCount = (template.slots || []).length;
-		return { template, slotCount, matched: slotCount === photoCount };
-	});
 	$: savedFrames = savedFramesList.map((frame) => ({
 		frame,
 		matched: frame.slotCount === photoCount
 	}));
-
-	function isPresetSelected(key: string): boolean {
-		return activeFrame === null && !customTemplateData && $session.selectedTemplate === key;
-	}
-
-	function isCustomSelected(template: CustomTemplate): boolean {
-		return customTemplateData?.id === template.id;
-	}
 
 	// ── Preferensi workspace ──
 	let showSlotNumbers = true;
@@ -153,22 +128,9 @@
 	}
 
 	onMount(async () => {
-		await refreshCustomTemplates();
 		await refreshSavedFrames();
-		// Pilihan lama bisa menunjuk preset katalog yang sudah dihapus.
-		if (!customTemplateData && !TEMPLATES[$session.selectedTemplate]) {
-			selectBuiltinTemplate('classic');
-		}
 		await renderPreview();
 	});
-
-	async function refreshCustomTemplates(): Promise<void> {
-		try {
-			customTemplatesList = await getAllCustomTemplates();
-		} catch (e) {
-			console.error('Error refreshing custom templates:', e);
-		}
-	}
 
 	async function refreshSavedFrames(): Promise<void> {
 		try {
@@ -176,16 +138,6 @@
 		} catch (e) {
 			console.error('Error refreshing saved frames:', e);
 		}
-	}
-
-	function selectPreset(key: string): void {
-		selectBuiltinTemplate(key);
-		setActiveFrame(null);
-	}
-
-	function selectCustom(template: CustomTemplate): void {
-		setCustomTemplate(template);
-		setActiveFrame(null);
 	}
 
 	function selectSavedFrame(frame: PhotoFrame): void {
@@ -197,11 +149,6 @@
 	}
 
 	let isPanelCollapsed = false;
-
-	// Custom template modal states
-	let showBuilderModal = false;
-	let builderEditingTemplate: CustomTemplate | null = null;
-	let showLibraryModal = false;
 
 	// Photo zoom modal — dialog native modal (showModal) agar terpusat,
 	// punya backdrop, dan Escape bekerja (R-32)
@@ -229,25 +176,7 @@
 	}
 
 	function handleNext(): void {
-		goTo('print');
-	}
-
-	function handleCustomTemplateSaved(savedTemplate: CustomTemplate): void {
-		showBuilderModal = false;
-		setCustomTemplate(savedTemplate);
-		refreshCustomTemplates();
-	}
-
-	function handleSelectLibraryCustom(tmpl: CustomTemplate): void {
-		setCustomTemplate(tmpl);
-		showLibraryModal = false;
-		refreshCustomTemplates();
-	}
-
-	function openCreateCustomTemplate(): void {
-		builderEditingTemplate = null;
-		showBuilderModal = true;
-		showLibraryModal = false;
+		goTo('edit');
 	}
 </script>
 
@@ -452,170 +381,77 @@
 
 		<!-- 3. RIGHT COLUMN: Template Inspector & NEXT -->
 		{#if !isPanelCollapsed}
-			<aside class="templates-column" aria-label="Pilih desain strip">
-				{#if activeFrame}
-					<div class="frame-panel">
-						<p class="frame-panel-label font-mono">FRAME AKTIF</p>
-						<p class="frame-panel-name">{activeFrame.name}</p>
-						<p class="frame-panel-note font-mono">
-							{photoCount} slot foto · {product.cm} cm
+			<aside class="templates-column" aria-label="Pilih template">
+				<div class="panel-head panel-head--frames">
+					<h2 class="panel-title font-display">PILIH TEMPLATE</h2>
+					<p class="product-note font-mono">
+						{product.cm} cm · {photoCount} foto
+					</p>
+				</div>
+
+				<div
+					class="templates-grid-scroll"
+					id="template-panel"
+					role="tabpanel"
+					aria-labelledby="template-panel-title"
+				>
+					{#if savedFrames.length === 0}
+						<p class="empty-catalog font-mono">
+							Belum ada template terpasang. Admin bisa menambahkannya lewat Frame Studio.
 						</p>
-						<p class="frame-panel-hint">
-							Artwork frame dipakai apa adanya. Foto diisi otomatis ke lubang yang terdeteksi.
-						</p>
-						<button
-							type="button"
-							class="create-template-btn font-mono"
-							on:click={() => setActiveFrame(null)}
-						>
-							Lepas Frame
-						</button>
-					</div>
-				{:else}
-					<div class="panel-head">
-						<div class="categories-header" role="tablist" aria-label="Jenis template">
-							<button
-								type="button"
-								id="tab-preset"
-								class="category-pill font-mono"
-								class:is-active={activeTab === 'preset'}
-								on:click={() => (activeTab = 'preset')}
-								role="tab"
-								aria-selected={activeTab === 'preset' ? 'true' : 'false'}
-								aria-controls="template-panel"
-							>
-								Preset
-							</button>
-							<button
-								type="button"
-								id="tab-mine"
-								class="category-pill font-mono"
-								class:is-active={activeTab === 'mine'}
-								on:click={() => (activeTab = 'mine')}
-								role="tab"
-								aria-selected={activeTab === 'mine' ? 'true' : 'false'}
-								aria-controls="template-panel"
-							>
-								Template Saya ({userTemplates.length})
-							</button>
+					{:else}
+						<div class="preset-grid" role="group" aria-label="Template admin">
+							{#each savedFrames as item (item.frame.id)}
+								<button
+									type="button"
+									class="template-card"
+									class:is-selected={$session.activeFrame?.id === item.frame.id}
+									class:is-locked={!item.matched}
+									on:click={() => selectSavedFrame(item.frame)}
+									disabled={!item.matched}
+									aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
+									aria-label="{item.frame.name}{item.matched
+										? ''
+										: ` — butuh ${item.frame.slotCount} foto`}"
+								>
+									<span class="template-thumb">
+										<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
+										{#if $session.activeFrame?.id === item.frame.id}
+											<span class="selected-mark" aria-hidden="true">✓</span>
+										{/if}
+									</span>
+									<span class="template-name">{item.frame.name}</span>
+									{#if !item.matched}
+										<span class="template-note font-mono">{item.frame.slotCount} foto</span>
+									{/if}
+								</button>
+							{/each}
 						</div>
-						<p class="product-note font-mono">
-							{product.cm} cm · {photoCount} foto
-						</p>
-					</div>
+					{/if}
+				</div>
 
-					<div
-						class="templates-grid-scroll"
-						id="template-panel"
-						role="tabpanel"
-						aria-labelledby={activeTab === 'preset' ? 'tab-preset' : 'tab-mine'}
-					>
-						{#if activeTab === 'preset'}
-							<div class="preset-grid" role="group" aria-label="Preset kertas">
-								{#each presets as preset (preset.key)}
-									<button
-										type="button"
-										class="template-card"
-										class:is-selected={isPresetSelected(preset.key)}
-										on:click={() => selectPreset(preset.key)}
-										aria-pressed={isPresetSelected(preset.key) ? 'true' : 'false'}
-									>
-										<span class="template-thumb">
-											<TemplateThumb template={preset.key} count={photoCount} />
-											{#if isPresetSelected(preset.key)}
-												<span class="selected-mark" aria-hidden="true">✓</span>
-											{/if}
-										</span>
-										<span class="template-name">{preset.label}</span>
-									</button>
-								{/each}
-								{#each savedFrames as item (item.frame.id)}
-									<button
-										type="button"
-										class="template-card"
-										class:is-selected={$session.activeFrame?.id === item.frame.id}
-										class:is-locked={!item.matched}
-										on:click={() => selectSavedFrame(item.frame)}
-										disabled={!item.matched}
-										aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
-										aria-label="{item.frame.name}{item.matched
-											? ''
-											: ` — butuh ${item.frame.slotCount} foto`}"
-									>
-										<span class="template-thumb">
-											<img src={item.frame.artworkDataUrl} alt="" class="template-thumb-img" />
-											{#if $session.activeFrame?.id === item.frame.id}
-												<span class="selected-mark" aria-hidden="true">✓</span>
-											{/if}
-										</span>
-										<span class="template-name">{item.frame.name}</span>
-										{#if !item.matched}
-											<span class="template-note font-mono">{item.frame.slotCount} foto</span>
-										{/if}
-									</button>
-								{/each}
-							</div>
-						{:else if userTemplates.length === 0}
-							<p class="empty-catalog font-mono">
-								Belum ada template buatanmu. Template baru mengikuti jumlah foto sesi ini.
-							</p>
-						{:else}
-							<div class="preset-grid" role="group" aria-label="Template buatan sendiri">
-								{#each userTemplates as item (item.template.id)}
-									<button
-										type="button"
-										class="template-card"
-										class:is-selected={isCustomSelected(item.template)}
-										class:is-locked={!item.matched}
-										on:click={() => selectCustom(item.template)}
-										disabled={!item.matched}
-										aria-pressed={isCustomSelected(item.template) ? 'true' : 'false'}
-										aria-label="{item.template.name}{item.matched
-											? ''
-											: ` — butuh ${item.slotCount} foto`}"
-									>
-										<span class="template-thumb">
-											<TemplateThumb template={item.template} count={item.slotCount} />
-											{#if isCustomSelected(item.template)}
-												<span class="selected-mark" aria-hidden="true">✓</span>
-											{/if}
-										</span>
-										<span class="template-name">{item.template.name}</span>
-										{#if !item.matched}
-											<span class="template-note font-mono">{item.slotCount} foto</span>
-										{/if}
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-
+				{#if savedFrames.length !== 0}
 					<div class="templates-actions">
-						<button
-							type="button"
-							class="create-template-btn font-mono"
-							on:click={openCreateCustomTemplate}
-						>
-							+ Buat Template
-						</button>
+						<p class="frame-action-note font-mono">Template admin · tanpa kunci</p>
 						<button
 							type="button"
 							class="library-btn font-mono"
-							on:click={() => (showLibraryModal = true)}
-							aria-label="Kelola template tersimpan"
+							on:click={() => setActiveFrame(null)}
+							aria-label="Lepas template aktif"
+							disabled={!activeFrame}
 						>
-							Kelola
+							{#if activeFrame}
+								Lepas template
+							{:else}
+								Tidak ada aktif
+							{/if}
 						</button>
 					</div>
 				{/if}
 
-				<!-- Bottom Action Button: LANJUT CETAK -->
 				<footer class="templates-footer">
-					<button type="button" class="editor-detail-btn font-mono" on:click={() => goTo('edit')}>
-						✎ Edit Detail
-					</button>
 					<button type="button" id="btn-next" class="capsule-cta font-mono" on:click={handleNext}>
-						LANJUT CETAK
+						SELANJUTNYA
 						<svg
 							viewBox="0 0 24 24"
 							width="14"
@@ -658,34 +494,6 @@
 		</div>
 	</div>
 </dialog>
-
-<!-- Custom Template Builder Modal -->
-{#if showBuilderModal}
-	<CustomTemplateBuilder
-		initialTemplate={builderEditingTemplate}
-		initialSlotCount={photoCount}
-		onClose={() => {
-			showBuilderModal = false;
-		}}
-		onSaveAndApply={handleCustomTemplateSaved}
-	/>
-{/if}
-
-<!-- Custom Template Library Modal -->
-{#if showLibraryModal}
-	<TemplateLibraryModal
-		onClose={() => {
-			showLibraryModal = false;
-		}}
-		onSelectTemplate={handleSelectLibraryCustom}
-		onEditTemplate={(tmpl) => {
-			builderEditingTemplate = tmpl;
-			showLibraryModal = false;
-			showBuilderModal = true;
-		}}
-		onCreateNew={openCreateCustomTemplate}
-	/>
-{/if}
 
 <style>
 	/* ==========================================================================
@@ -1135,93 +943,29 @@
 		border-bottom: 1px solid var(--ring-line);
 	}
 
-	/* Mode frame: panel template diganti ringkasan frame aktif */
-	.frame-panel {
-		flex: 1;
+	.panel-head--frames {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
+		align-items: baseline;
+		justify-content: space-between;
+		padding: 12px 14px 8px;
 		gap: 10px;
-		padding: 20px 16px;
-		overflow-y: auto;
-		min-height: 0;
 	}
 
-	.frame-panel-label {
+	.panel-title {
 		margin: 0;
-		font-size: 0.58rem;
-		font-weight: 800;
-		letter-spacing: 0.24em;
-		color: var(--fg-dim);
-	}
-
-	.frame-panel-name {
-		margin: 0;
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 		font-weight: 650;
-		line-height: 1.25;
+		letter-spacing: 0.02em;
 		color: var(--fg);
 	}
 
-	.frame-panel-note {
+	.frame-action-note {
 		margin: 0;
-		font-size: 0.62rem;
-		letter-spacing: 0.14em;
-		color: var(--fg-dim);
-	}
-
-	.frame-panel-hint {
-		margin: 0;
-		font-size: 0.72rem;
-		line-height: 1.55;
-		color: var(--fg-dim);
-	}
-
-	.frame-panel .create-template-btn {
-		width: 100%;
-		margin-top: 4px;
-	}
-
-	.categories-header {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 4px;
-		padding: 8px 10px 6px;
-	}
-
-	.category-pill {
-		min-height: 44px;
-		padding: 6px 10px;
-		border-radius: 999px;
-		background: transparent;
-		border: 1px solid var(--ring-line);
-		color: var(--fg-dim);
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
+		font-size: 0.56rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		cursor: pointer;
-		white-space: nowrap;
-		transition:
-			color 160ms ease,
-			background-color 160ms ease,
-			border-color 160ms ease;
-	}
-
-	.category-pill:hover {
-		color: var(--fg);
-		border-color: var(--hairline);
-	}
-
-	.category-pill.is-active {
-		background: var(--fg);
-		color: var(--bg);
-		border-color: var(--fg);
-	}
-
-	.category-pill:focus-visible {
-		outline: 2.5px solid var(--focus);
-		outline-offset: 2px;
+		color: var(--fg-dim);
 	}
 
 	.product-note {
@@ -1241,7 +985,6 @@
 		flex-shrink: 0;
 	}
 
-	.create-template-btn,
 	.library-btn {
 		display: inline-flex;
 		align-items: center;
@@ -1264,14 +1007,12 @@
 			background-color 160ms ease;
 	}
 
-	.create-template-btn:hover,
 	.library-btn:hover {
 		color: var(--fg);
 		border-color: var(--fg);
 		background: var(--ring-line);
 	}
 
-	.create-template-btn:focus-visible,
 	.library-btn:focus-visible {
 		outline: 2.5px solid var(--focus);
 		outline-offset: 3px;
@@ -1386,40 +1127,7 @@
 		padding: 22px 16px;
 	}
 
-	.editor-detail-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		width: 100%;
-		min-height: 44px;
-		padding: 0 24px;
-		margin-bottom: 10px;
-		border: 1px solid var(--hairline);
-		border-radius: 999px;
-		background: transparent;
-		color: var(--fg);
-		font-size: 0.6rem;
-		font-weight: 800;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		cursor: pointer;
-		transition:
-			border-color 160ms ease,
-			background-color 160ms ease;
-	}
-
-	.editor-detail-btn:hover {
-		border-color: var(--fg);
-		background: var(--ring-line);
-	}
-
-	.editor-detail-btn:focus-visible {
-		outline: 2.5px solid var(--focus);
-		outline-offset: 4px;
-	}
-
-	/* Bottom Actions LANJUT CETAK button */
+	/* Bottom Actions SELANJUTNYA button */
 	.templates-footer {
 		padding: 12px 14px 16px;
 		border-top: 1px solid var(--ring-line);
