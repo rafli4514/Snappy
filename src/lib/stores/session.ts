@@ -62,7 +62,6 @@ export const session = writable<SessionState>({
 	isCapturing: false,
 	captureProgress: 0,
 	photoCount: 4, // jumlah slot strip (1–6)
-	burstCount: 10, // PhotoDefaultPhotosTaken = 10
 	activeFrame: null,
 	selectedPhotoIndices: [],
 	customTemplateData: null,
@@ -78,7 +77,7 @@ export const session = writable<SessionState>({
 export const isPhotoSetComplete = derived(
 	session,
 	($s) =>
-		$s.photos.length >= $s.burstCount &&
+		$s.photos.length >= $s.photoCount &&
 		$s.selectedPhotoIndices.length === $s.photoCount &&
 		$s.photos.every(Boolean)
 );
@@ -167,19 +166,19 @@ export function addPhoto(dataUrl: string): void {
 		const photos = [...s.photos];
 		if (s.retakeIndex !== null) {
 			photos[s.retakeIndex] = dataUrl;
-		} else {
-			photos.push(dataUrl);
+			return { ...s, photos, captureProgress: s.captureProgress };
 		}
-		const burstDone = s.retakeIndex === null && photos.length >= s.burstCount;
-		const selectedPhotoIndices =
-			burstDone && s.selectedPhotoIndices.length === 0
-				? evenIndices(photos.length, s.photoCount)
-				: s.selectedPhotoIndices;
+		photos.push(dataUrl);
+		// Kamera jalan sekali per slot — slot yang sudah terisi langsung dipilih.
+		const selectedPhotoIndices = Array.from(
+			{ length: Math.min(photos.length, s.photoCount) },
+			(_, i) => i
+		);
 		return {
 			...s,
 			photos,
 			selectedPhotoIndices,
-			captureProgress: s.retakeIndex !== null ? s.captureProgress : photos.length
+			captureProgress: photos.length
 		};
 	});
 }
@@ -278,7 +277,7 @@ export function setPhotoCount(count: number): void {
 	}));
 }
 
-/** Pilih N index foto burst dengan jarak merata (0, 3, 6, 9 untuk 4 dari 10). */
+/** Pilih N index foto dengan jarak merata (0, 3, 6, 9 untuk 4 dari 10). */
 function evenIndices(total: number, take: number): number[] {
 	if (total <= 0 || take <= 0) return [];
 	const n = Math.min(take, total);
@@ -304,7 +303,7 @@ export function setActiveFrame(frame: PhotoFrame | null): void {
 	});
 }
 
-/** Pilih ulang foto otomatis (jarak merata) dari burst yang tersedia. */
+/** Pilih ulang foto otomatis (jarak merata) dari foto yang tersedia. */
 export function autoSelectPhotos(): void {
 	session.update((s) => ({
 		...s,
@@ -443,7 +442,6 @@ export function resetSession(): void {
 		isCapturing: false,
 		captureProgress: 0,
 		photoCount: 4,
-		burstCount: 10,
 		activeFrame: null,
 		selectedPhotoIndices: [],
 		customTemplateData: null,

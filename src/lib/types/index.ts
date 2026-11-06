@@ -43,11 +43,9 @@ export interface SessionState {
 	captureProgress: number;
 	/** Foto yang dipakai strip (= jumlah slot frame aktif, 1–6). */
 	photoCount: number;
-	/** Berapa kali kamera menjepret (burst), terpisah dari jumlah slot. */
-	burstCount: number;
 	/** Frame unggahan yang aktif; null = pakai template klasik. */
 	activeFrame: PhotoFrame | null;
-	/** Index foto burst yang dipakai, urut kronologis. Panjang = photoCount. */
+	/** Index foto yang dipakai (urut kronologis = urutan strip). Panjang = photoCount. */
 	selectedPhotoIndices: number[];
 	customTemplateData: CustomTemplate | null;
 	theme: KioskTheme;

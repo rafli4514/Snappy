@@ -108,7 +108,7 @@
 	let shutterAnimId: number | null = null;
 	let lastPhotoUrl: string | null = null;
 
-	$: burstCount = $session.burstCount;
+	$: slotCount = $session.photoCount;
 	$: retakeIndex = $session.retakeIndex;
 	$: isSingleRetake = $session.retakeIndex !== null;
 	$: cam = $session.cameraSettings;
@@ -257,8 +257,8 @@
 
 		isSessionActive = true;
 		currentPhotoNum = retakeIndex !== null ? retakeIndex + 1 : 1;
-		// Burst penuh; jumlah slot frame hanya menentukan berapa yang dipakai.
-		const totalShots = retakeIndex !== null ? 1 : burstCount;
+		// Satu foto per slot frame (jumlah slot = jumlah foto yang perlu terisi).
+		const totalShots = retakeIndex !== null ? 1 : Math.max(1, slotCount);
 		const waitSec = get(session).cameraSettings.timer;
 
 		for (let i = 0; i < totalShots; i++) {
@@ -407,11 +407,9 @@
 
 			<span class="shot-counter" role="status">
 				{#if isSessionActive}
-					#{currentPhotoNum} / {isSingleRetake ? 1 : burstCount}
+					#{currentPhotoNum} / {slotCount}
 				{:else if isSingleRetake}
 					Retake #{(retakeIndex ?? 0) + 1}
-				{:else}
-					{burstCount} Shots
 				{/if}
 			</span>
 
@@ -567,7 +565,7 @@
 
 			<p class="session-hint" role="status" aria-live="polite">
 				{#if isSessionActive && countdownValue === null}
-					#{currentPhotoNum} / {isSingleRetake ? 1 : burstCount}
+					#{currentPhotoNum}
 				{/if}
 			</p>
 		</footer>
