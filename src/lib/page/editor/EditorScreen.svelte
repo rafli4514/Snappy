@@ -6,7 +6,8 @@
 		swapPhotos,
 		movePhoto,
 		stripPhotos,
-		setActiveFrame
+		setActiveFrame,
+		selectBuiltinTemplate
 	} from '#lib/stores/session';
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
@@ -426,6 +427,32 @@
 						</div>
 					{:else}
 						<div class="preset-grid" role="group" aria-label="Template admin">
+							<button
+								type="button"
+								class="template-card"
+								class:is-selected={$session.activeFrame === null &&
+									$session.customTemplateData === null &&
+									$session.selectedTemplate === 'classic'}
+								on:click={() => {
+									setActiveFrame(null);
+									selectBuiltinTemplate('classic');
+								}}
+								aria-pressed={$session.activeFrame === null &&
+								$session.customTemplateData === null &&
+								$session.selectedTemplate === 'classic'
+									? 'true'
+									: 'false'}
+								aria-label="Classic bawaan"
+							>
+								<span class="template-thumb design-thumb--builtin">
+									<span>Classic</span>
+									{#if $session.activeFrame === null && $session.customTemplateData === null && $session.selectedTemplate === 'classic'}
+										<span class="selected-mark" aria-hidden="true">✓</span>
+									{/if}
+								</span>
+								<span class="template-name">Classic (bawaan)</span>
+								<span class="template-badge font-mono">Kertas booth</span>
+							</button>
 							{#each savedFrames as item (item.frame.id)}
 								<button
 									type="button"
