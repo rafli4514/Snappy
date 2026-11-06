@@ -239,6 +239,9 @@ export function setRetakeIndex(index: number | null): void {
 
 /** Mark capturing as done, transition to review */
 export function finishCapture(): void {
+	const current = get(session);
+	const hasSet =
+		current.photos.length > 0 && current.selectedPhotoIndices.length === current.photoCount;
 	session.update((s) => ({
 		...s,
 		isCapturing: false,
@@ -247,9 +250,9 @@ export function finishCapture(): void {
 			s.selectedPhotoIndices.length === s.photoCount
 				? s.selectedPhotoIndices
 				: evenIndices(s.photos.length, s.photoCount),
-		screen: 'review'
+		screen: hasSet ? 'review' : 'start'
 	}));
-	void goto(SCREEN_PATH.review);
+	void goto(SCREEN_PATH[hasSet ? 'review' : 'start']);
 }
 
 /** Pilih preset kertas bawaan; template custom yang aktif ikut dilepas */
