@@ -36,7 +36,9 @@
 	let etalaseCanvases: (HTMLCanvasElement | undefined)[] = $state([]);
 	let deckCanvases: (HTMLCanvasElement | undefined)[] = $state([]);
 	let etalaseSig = '';
+	let etalaseSigN = 0;
 	let deckSig = '';
+	let deckSigN = 0;
 
 	/* Reaktif: tinggi viewport etalase & lebar terukur (0 sebelum ukur pertama) */
 	let tinggi = $state(280);
@@ -111,29 +113,34 @@
 		};
 	});
 
-	// Kanvas etalase: satu per produk, isi ulang hanya saat template berganti
+	// Kanvas etalase: satu per produk, isi ulang hanya saat template atau
+	// jumlah produk berubah (memilih frame mengubah photoCount → refresh).
 	$effect(() => {
 		const template = $session.selectedTemplate;
-		if (template === etalaseSig) return;
+		const n = $session.photoCount;
+		if (template === etalaseSig && n === etalaseSigN) return;
 		etalaseSig = template;
-		JUMLAH.forEach((n, i) => {
+		etalaseSigN = n;
+		JUMLAH.forEach((k, i) => {
 			const c = etalaseCanvases[i];
-			if (c) renderStripPreview(c, Array(n).fill(null), template, {});
+			if (c) renderStripPreview(c, Array(k).fill(null), template, {});
 		});
 	});
 
 	// Miniatur rak: idem
 	$effect(() => {
 		const template = $session.selectedTemplate;
-		if (template === deckSig) return;
+		const n = $session.photoCount;
+		if (template === deckSig && n === deckSigN) return;
 		deckSig = template;
-		JUMLAH.forEach((n, i) => {
+		deckSigN = n;
+		JUMLAH.forEach((k, i) => {
 			const c = deckCanvases[i];
 			if (c) {
-				const pk = produk(n);
+				const pk = produk(k);
 				c.width = Math.round(pk.pxW / 6);
 				c.height = Math.round(pk.pxH / 6);
-				renderStripPreview(c, Array(n).fill(null), template, {});
+				renderStripPreview(c, Array(k).fill(null), template, {});
 			}
 		});
 	});
