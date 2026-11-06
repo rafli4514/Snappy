@@ -78,10 +78,6 @@
 	function handleAmbil(): void {
 		goTo('camera');
 	}
-
-	function ratioStyle(f: { pxW: number; pxH: number }): string {
-		return `aspect-ratio: ${f.pxW} / ${f.pxH};`;
-	}
 </script>
 
 <section
@@ -127,7 +123,7 @@
 				aria-selected={$session.formatId === f.id}
 				aria-label={`${f.label}, ${f.cm}`}
 			>
-				<span class="format-thumb" style={ratioStyle(f)} aria-hidden="true">
+				<span class="format-thumb" style="height: {Math.round(124 * f.pxH / f.pxW)}px;" aria-hidden="true">
 					<span class="format-thumb-label">{f.label.split('·')[0].trim()}</span>
 				</span>
 				<span class="format-meta">
