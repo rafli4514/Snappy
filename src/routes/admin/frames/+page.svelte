@@ -166,13 +166,18 @@
 			error = 'Minimal satu placeholder dulu. Ketuk kandidat yang mau diisi.';
 			return;
 		}
-		if (!ratioMatches(draft.width, draft.height, placeholders.length)) {
+		const guideOk = ratioMatches(draft.width, draft.height, placeholders.length);
+		const formatMatch = detectFormat(draft.width, draft.height);
+		if (!guideOk && !formatMatch) {
 			const guide = sizeGuideFor(placeholders.length);
 			error = guide
-				? `Rasio artwork ${draft.width} × ${draft.height} tidak cocok untuk ${placeholders.length} placeholder. Pakai canvas ${guide.width} × ${guide.height} px (${guide.cm}).`
-				: `Rasio artwork tidak cocok untuk ${placeholders.length} placeholder.`;
+				? `Rasio artwork ${draft.width} × ${draft.height} tidak cocok. Pakai ukuran kustom ${guide.width} × ${guide.height} px (${guide.cm} cm) atau salah satu format standard (Katalog Standard).`
+				: `Rasio artwork ${draft.width} × ${draft.height} tidak cocok dengan ukuran kustom maupun format standard.`;
 			return;
 		}
+		// Auto-kategori: hanya jika slot count juga cocok dengan format.
+		const matchedFormat =
+			formatMatch && formatMatch.photos.includes(placeholders.length) ? formatMatch : null;
 
 		const name = frameName.trim() || draft.sourceName;
 		const now = Date.now();
@@ -196,7 +201,7 @@
 				slots: boxesToSlots(placeholders),
 				focal,
 				source: 'upload',
-				formatId: detectFormat(draft.width, draft.height)?.id ?? null,
+				formatId: matchedFormat?.id ?? null,
 				createdAt: now,
 				updatedAt: now
 			};
