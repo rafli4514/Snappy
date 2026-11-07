@@ -13,7 +13,7 @@
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
-	import { STICKER_ASSETS, type StickerAsset } from '#lib/data/stickers';
+	import { getStickersByCategory, STICKER_CATEGORIES, type StickerAsset } from '#lib/data/stickers';
 	import { PHOTO_FILTERS } from '#lib/data/filters';
 	import type { BuiltinSticker, PhotoTransform, StickerLayer } from '#lib/types';
 
@@ -32,6 +32,7 @@
 	$: stickers = $session.stickers;
 	$: photoFilter = $session.photoFilter;
 	$: photoFilterCss = PHOTO_FILTERS.find((f) => f.key === photoFilter)?.cssFilter ?? 'none';
+	$: stickerList = getStickersByCategory(selectedStickerCategory);
 
 	$: activeTemplate = activeFrame
 		? frameToTemplate(activeFrame)
@@ -48,6 +49,7 @@
 
 	type PanelTab = 'foto' | 'filter' | 'sticker';
 	let activeTab: PanelTab = 'foto';
+	let selectedStickerCategory = 'Vintage';
 
 	let showSlotNumbers = true;
 	let renderSeq = 0;
@@ -737,16 +739,40 @@
 				</div>
 			{:else}
 				<div class="tab-panel">
-					<div class="tab-photo-list">
-						{#each STICKER_ASSETS as s (s.dbId)}
-							<button
-								type="button"
-								class="tab-action-btn font-mono"
-								on:click={() => handleAddSticker(s)}
-							>
-								✦ {s.name}
-							</button>
-						{/each}
+					<div class="sticker-toolbar">
+						<label class="sticker-select-label font-mono" for="sticker-category-select">
+							Kategori
+						</label>
+						<select
+							id="sticker-category-select"
+							class="sticker-select font-mono"
+							bind:value={selectedStickerCategory}
+						>
+							{#each STICKER_CATEGORIES as c (c.key)}
+								<option value={c.key}>{c.label}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						<div class="sticker-grid">
+							{#each stickerList as s (s.dbId)}
+								<button
+									type="button"
+									class="sticker-tile"
+									on:click={() => handleAddSticker(s)}
+									aria-label="Tambah stiker {s.name}"
+								>
+									<img
+										class="sticker-tile-img"
+										src={'/stickers/vintage/' + s.file}
+										alt={s.name}
+										loading="lazy"
+										draggable="false"
+									/>
+									<span class="sticker-tile-name font-mono">{s.name}</span>
+								</button>
+							{/each}
+						</div>
 					</div>
 					{#if stickers.length > 0}
 						<div class="tab-sticker-list">
@@ -1235,10 +1261,97 @@
 		cursor: not-allowed;
 	}
 
-	.tab-photo-list {
+	.sticker-toolbar {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+
+	.sticker-select-label {
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+
+	.sticker-select {
+		flex: 1;
+		min-height: 44px;
+		padding: 8px 10px;
+		border: 1px solid var(--hairline);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--fg);
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+
+	.sticker-select:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.sticker-grid {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.sticker-tile {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+		border: 1px solid var(--hairline);
+		border-radius: 10px;
+		background: transparent;
+		overflow: hidden;
+		cursor: pointer;
+		text-align: left;
+		min-height: 44px;
+		transition: border-color 160ms ease;
+	}
+
+	.sticker-tile:hover {
+		border-color: var(--fg-dim);
+	}
+
+	.sticker-tile:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.sticker-tile-img {
+		display: block;
+		width: 100%;
+		aspect-ratio: 1;
+		object-fit: contain;
+		background: var(--veil-edge);
+		border-bottom: 1px solid var(--hairline);
+		padding: 4px;
+		box-sizing: border-box;
+	}
+
+	.sticker-tile-name {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 26px;
+		padding: 6px 4px;
+		font-size: 0.55rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		color: var(--fg-dim);
+		text-align: center;
+		line-height: 1.3;
+	}
+
+	.sticker-tile:hover .sticker-tile-name {
+		color: var(--fg);
 	}
 
 	.filter-groups {

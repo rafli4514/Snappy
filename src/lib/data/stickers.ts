@@ -13,7 +13,10 @@ export interface StickerAsset {
 	file: string;
 	/** Pixel width × height (height is always ~200). */
 	size: { w: number; h: number };
-	/** Whether this sticker is active. */ active: boolean;
+	/** Whether this sticker is active. */
+	active: boolean;
+	/** Kategori sticker (mis. 'Vintage') untuk tab pemilihan. */
+	category?: string;
 }
 
 export const STICKER_ASSETS: StickerAsset[] = [
@@ -31,6 +34,134 @@ export const STICKER_ASSETS: StickerAsset[] = [
 	{ dbId: 36, name: 'Sticker 18', file: '18.webp', size: { w: 257, h: 200 }, active: true },
 	{ dbId: 37, name: 'Sticker 19', file: '19.webp', size: { w: 217, h: 200 }, active: true }
 ];
+
+/** Aset stiker pack Vintage dari folder VINTAGE STICKER PACK. */
+export const VINTAGE_STICKER_ASSETS: StickerAsset[] = [
+	{
+		dbId: 101,
+		name: 'Vintage Sticker 10',
+		file: 'vintage-sticker-10.png',
+		size: { w: 736, h: 673 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 102,
+		name: 'Vintage Sticker 11',
+		file: 'vintage-sticker-11.png',
+		size: { w: 600, h: 600 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 103,
+		name: 'Vintage Sticker 12',
+		file: 'vintage-sticker-12.png',
+		size: { w: 650, h: 882 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 104,
+		name: 'Vintage Sticker 13',
+		file: 'vintage-sticker-13.png',
+		size: { w: 600, h: 600 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 105,
+		name: 'Vintage Sticker 14',
+		file: 'vintage-sticker-14.png',
+		size: { w: 600, h: 600 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 106,
+		name: 'Vintage Sticker 20',
+		file: 'vintage-sticker-20.png',
+		size: { w: 2100, h: 1500 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 107,
+		name: 'Vintage Sticker 21',
+		file: 'vintage-sticker-21.png',
+		size: { w: 1000, h: 931 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 108,
+		name: 'Vintage Sticker 22',
+		file: 'vintage-sticker-22.png',
+		size: { w: 269, h: 267 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 109,
+		name: 'Vintage Sticker 23',
+		file: 'vintage-sticker-23.png',
+		size: { w: 1671, h: 1671 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 110,
+		name: 'Vintage Sticker 24',
+		file: 'vintage-sticker-24.png',
+		size: { w: 2095, h: 1780 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 111,
+		name: 'Vintage Sticker 31',
+		file: 'vintage-sticker-31.png',
+		size: { w: 423, h: 590 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 112,
+		name: 'Vintage Sticker 32',
+		file: 'vintage-sticker-32.png',
+		size: { w: 5116, h: 3600 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 113,
+		name: 'Vintage Sticker 33',
+		file: 'vintage-sticker-33.png',
+		size: { w: 1500, h: 493 },
+		active: true,
+		category: 'Vintage'
+	},
+	{
+		dbId: 114,
+		name: 'Vintage Sticker 34',
+		file: 'vintage-sticker-34.png',
+		size: { w: 503, h: 2200 },
+		active: true,
+		category: 'Vintage'
+	}
+];
+
+/** Kategori sticker yang tersedia untuk dipilih di tab alat. */
+export const STICKER_CATEGORIES: { key: string; label: string }[] = [
+	{ key: 'Vintage', label: 'Vintage' }
+];
+
+/** Stiker aktif per kategori. */
+export function getStickersByCategory(category: string): StickerAsset[] {
+	return STICKER_ASSETS.concat(VINTAGE_STICKER_ASSETS).filter(
+		(s) => s.active && s.category === category
+	);
+}
 
 /** Return only active stickers. */
 export function getActiveStickers() {
