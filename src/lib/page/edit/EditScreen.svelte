@@ -701,21 +701,36 @@
 				</div>
 			{:else if activeTab === 'filter'}
 				<div class="tab-panel">
-					<div class="tab-photo-list">
+					<div class="filter-groups">
 						{#each FILTER_GROUPS as group}
-							<div class="filter-group">
-								<span class="filter-group-label">{group.label}</span>
-								{#each group.filters as f (f.key)}
-									<button
-										type="button"
-										class="tab-action-btn font-mono"
-										class:is-active={photoFilter === f.key}
-										on:click={() => setPhotoFilter(f.key)}
-									>
-										{f.name}
-									</button>
-								{/each}
-							</div>
+							<section class="filter-group" aria-label="Filter {group.label}">
+								<span class="filter-group-label font-mono">{group.label}</span>
+								<div class="filter-grid">
+									{#each group.filters as f (f.key)}
+										<button
+											type="button"
+											class="filter-tile"
+											class:is-active={photoFilter === f.key}
+											on:click={() => setPhotoFilter(f.key)}
+											aria-pressed={photoFilter === f.key}
+											aria-label="Filter {f.name}, foto {selectedPhoto + 1}"
+										>
+											{#if photos[selectedPhoto]}
+												<img
+													class="filter-tile-preview"
+													src={photos[selectedPhoto]}
+													alt=""
+													style:filter={f.cssFilter || 'none'}
+													draggable="false"
+												/>
+											{:else}
+												<span class="filter-tile-empty" aria-hidden="true"></span>
+											{/if}
+											<span class="filter-tile-name font-mono">{f.name}</span>
+										</button>
+									{/each}
+								</div>
+							</section>
 						{/each}
 					</div>
 				</div>
@@ -1144,11 +1159,6 @@
 		background: var(--ring-line);
 	}
 
-	.tab-action-btn.is-active {
-		border-color: var(--fg);
-		background: var(--ring-line);
-	}
-
 	.tab-action-btn:focus-visible {
 		outline: 2.5px solid var(--focus);
 		outline-offset: 2px;
@@ -1228,6 +1238,97 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
+	}
+
+	.filter-groups {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.filter-group {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.filter-group-label {
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+
+	.filter-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.filter-tile {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+		border: 1px solid var(--hairline);
+		border-radius: 10px;
+		background: transparent;
+		overflow: hidden;
+		cursor: pointer;
+		text-align: left;
+		min-height: 44px;
+		transition:
+			border-color 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.filter-tile:hover {
+		border-color: var(--fg-dim);
+	}
+
+	.filter-tile:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.filter-tile.is-active {
+		border-color: var(--fg);
+		box-shadow: inset 0 0 0 1px var(--fg);
+	}
+
+	.filter-tile-preview {
+		display: block;
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		object-fit: cover;
+		background: var(--veil-edge);
+		border-bottom: 1px solid var(--hairline);
+	}
+
+	.filter-tile-name {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 26px;
+		padding: 6px 4px;
+		font-size: 0.55rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		color: var(--fg-dim);
+		text-align: center;
+		line-height: 1.3;
+	}
+
+	.filter-tile.is-active .filter-tile-name {
+		color: var(--fg);
+	}
+
+	.filter-tile-empty {
+		display: block;
+		width: 100%;
+		aspect-ratio: 4 / 3;
+		background: var(--veil-edge);
+		border-bottom: 1px solid var(--hairline);
 	}
 
 	.tab-sticker-list {
