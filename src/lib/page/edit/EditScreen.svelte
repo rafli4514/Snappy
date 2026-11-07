@@ -13,7 +13,13 @@
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
-	import { getStickersByCategory, STICKER_CATEGORIES, type StickerAsset } from '#lib/data/stickers';
+	import {
+		getStickersByCategory,
+		STICKER_ASSETS,
+		STICKER_CATEGORIES,
+		VINTAGE_STICKER_ASSETS,
+		type StickerAsset
+	} from '#lib/data/stickers';
 	import { PHOTO_FILTERS } from '#lib/data/filters';
 	import type { BuiltinSticker, PhotoTransform, StickerLayer } from '#lib/types';
 
@@ -218,6 +224,9 @@
 		const layer: StickerLayer = {
 			id: `sticker-${sticker.dbId}-${Date.now()}`,
 			stickerId: `sticker-${sticker.dbId}`,
+			src: sticker.category
+				? `/stickers/${sticker.category === 'Vintage' ? 'vintage' : 'Pixel'}/${sticker.file}`
+				: undefined,
 			x: Math.max(0, 0.5 - 0.25),
 			y: 0.1,
 			w: sticker.size.w / 600,
@@ -232,6 +241,14 @@
 	function handleRemoveSticker(id: string): void {
 		removeSticker(id);
 		if (dragStickerId === id) endStickerDrag();
+	}
+
+	function placedStickerName(id: string): string {
+		const builtin = BUILTIN_STICKERS.find((s) => s.id === id);
+		if (builtin) return builtin.name;
+		const dbId = Number(id.replace(/^sticker-/, ''));
+		const asset = [...STICKER_ASSETS, ...VINTAGE_STICKER_ASSETS].find((s) => s.dbId === dbId);
+		return asset ? asset.name : id;
 	}
 
 	function handleNext(): void {
@@ -778,9 +795,7 @@
 						<div class="tab-sticker-list">
 							{#each stickers as l (l.id)}
 								<div class="tab-sticker-item">
-									<span class="font-mono"
-										>{BUILTIN_STICKERS.find((s) => s.id === l.stickerId)?.name ?? l.stickerId}</span
-									>
+									<span class="font-mono">{placedStickerName(l.stickerId)}</span>
 									<button
 										type="button"
 										class="tab-mini-btn font-mono"

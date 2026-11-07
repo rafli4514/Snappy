@@ -199,6 +199,8 @@ export interface PhotoTransform {
 export interface StickerLayer {
 	id: string;
 	stickerId: string;
+	/** Gambar stiker (path) — fallback ke SVG builtin bila tidak ada. */
+	src?: string;
 	x: number;
 	y: number;
 	w: number;

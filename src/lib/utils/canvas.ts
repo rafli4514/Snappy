@@ -505,9 +505,9 @@ async function renderBuiltinStrip(
 
 	// Sticker layers placed on the strip (edit screen)
 	for (const st of stickers) {
-		const sticker = BUILTIN_STICKERS.find((s) => s.id === st.stickerId);
-		if (!sticker) continue;
-		const stickerImg = await loadImage(sticker.svg);
+		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
+		if (!src) continue;
+		const stickerImg = await loadImage(src);
 		ctx.save();
 		ctx.globalAlpha = st.opacity ?? 1;
 		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
@@ -724,9 +724,9 @@ async function renderCustomStrip(
 
 	// Sticker layers placed on the strip (edit screen)
 	for (const st of stickers) {
-		const sticker = BUILTIN_STICKERS.find((s) => s.id === st.stickerId);
-		if (!sticker) continue;
-		const stickerImg = await loadImage(sticker.svg);
+		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
+		if (!src) continue;
+		const stickerImg = await loadImage(src);
 		ctx.save();
 		ctx.globalAlpha = st.opacity ?? 1;
 		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
