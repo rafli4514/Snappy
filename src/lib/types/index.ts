@@ -6,7 +6,8 @@
 
 // ─── App shell ────────────────────────────────────────────────────────────────
 
-export type Screen = 'start' | 'strip' | 'camera' | 'review' | 'editor' | 'edit' | 'print';
+export type Screen =
+	'start' | 'strip' | 'camera' | 'review' | 'editor' | 'edit' | 'decorate' | 'print';
 
 export type KioskTheme = 'dark' | 'light';
 

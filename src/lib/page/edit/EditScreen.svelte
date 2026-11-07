@@ -53,8 +53,9 @@
 	$: posXAtDefault = (selectedTransform?.offsetX ?? 0) === 0;
 	$: posYAtDefault = (selectedTransform?.offsetY ?? 0) === 0;
 
+	export let initialTab: 'foto' | 'filter' | 'sticker' = 'foto';
 	type PanelTab = 'foto' | 'filter' | 'sticker';
-	let activeTab: PanelTab = 'foto';
+	let activeTab: PanelTab = initialTab;
 	let selectedStickerCategory = 'Vintage';
 
 	let showSlotNumbers = true;
@@ -252,7 +253,8 @@
 	}
 
 	function handleNext(): void {
-		goTo('print');
+		// /edit (foto) → halaman berikutnya (/decorate = filter & sticker) → /print.
+		goTo(activeTab === 'foto' ? 'decorate' : 'print');
 	}
 
 	/** Peta koordinat kanvas → slot foto (index + rect slot dalam px kanvas). */

@@ -722,21 +722,6 @@ async function renderCustomStrip(
 		ctx.restore();
 	}
 
-	// Sticker layers placed on the strip (edit screen)
-	for (const st of stickers) {
-		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
-		if (!src) continue;
-		const stickerImg = await loadImage(src);
-		ctx.save();
-		ctx.globalAlpha = st.opacity ?? 1;
-		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
-		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
-		const sw = st.w * stripW;
-		const sh = st.h * stripH;
-		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
-		ctx.restore();
-	}
-
 	// 5. Render overlay artwork on top of photo cutouts (standard frame behavior)
 	if (artworkImg && (template.artworkLayer === 'overlay' || !template.artworkLayer)) {
 		ctx.drawImage(artworkImg, stripX, stripY, stripW, stripH);
@@ -772,6 +757,21 @@ async function renderCustomStrip(
 		} catch (err: unknown) {
 			console.warn('Could not load decorative overlay layer image:', ovl.name, err);
 		}
+	}
+
+	// Sticker layers placed on the strip (edit screen) — digambar di atas frame/overlay
+	for (const st of stickers) {
+		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
+		if (!src) continue;
+		const stickerImg = await loadImage(src);
+		ctx.save();
+		ctx.globalAlpha = st.opacity ?? 1;
+		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
+		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
+		const sw = st.w * stripW;
+		const sh = st.h * stripH;
+		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
+		ctx.restore();
 	}
 
 	// 6. Optional caption/date overlay if custom template leaves room and option enabled

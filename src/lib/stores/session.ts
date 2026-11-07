@@ -106,6 +106,7 @@ const SCREEN_PATH: Record<Screen, string> = {
 	review: '/review',
 	editor: '/editor',
 	edit: '/edit',
+	decorate: '/decorate',
 	print: '/print'
 };
 

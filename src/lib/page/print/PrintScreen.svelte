@@ -33,6 +33,9 @@
 	$: activeFrame = $session.activeFrame;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
+	$: photoTransforms = $session.photoTransforms;
+	$: stickers = $session.stickers;
+	$: photoFilter = $session.photoFilter;
 
 	$: activeTemplate = activeFrame
 		? frameToTemplate(activeFrame)
@@ -67,7 +70,10 @@
 				caption,
 				showDate,
 				copies,
-				formatId: $session.formatId
+				formatId: $session.formatId,
+				photoTransforms,
+				stickers,
+				photoFilter
 			});
 			previewCanvas.width = fullCanvas.width > fullCanvas.height ? 600 : 400;
 			previewCanvas.height = fullCanvas.width > fullCanvas.height ? 400 : 600;
@@ -101,7 +107,10 @@
 							caption,
 							showDate,
 							copies,
-							formatId: $session.formatId
+							formatId: $session.formatId,
+							photoTransforms,
+							stickers,
+							photoFilter
 						});
 						stripDataUrl = exportCanvas.toDataURL('image/png');
 					} catch (ce) {
@@ -130,7 +139,14 @@
 		isPrinting = true;
 		printError = null;
 		try {
-			await printStrip(photos, activeTemplate, { caption, showDate, copies });
+			await printStrip(photos, activeTemplate, {
+				caption,
+				showDate,
+				copies,
+				photoTransforms,
+				stickers,
+				photoFilter
+			});
 		} catch (err) {
 			console.error('Print error:', err);
 			printError = 'Unable to open print dialog. Try downloading the PNG instead.';
@@ -144,7 +160,14 @@
 		isDownloading = true;
 		printError = null;
 		try {
-			await downloadStripPNG(photos, activeTemplate, { caption, showDate, copies });
+			await downloadStripPNG(photos, activeTemplate, {
+				caption,
+				showDate,
+				copies,
+				photoTransforms,
+				stickers,
+				photoFilter
+			});
 			downloadSuccess = true;
 			setTimeout(() => {
 				downloadSuccess = false;
