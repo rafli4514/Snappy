@@ -321,25 +321,16 @@
 		slotW: number,
 		slotH: number,
 		scale: number
-	): { sw: number; sh: number; maxPanX: number; maxPanY: number } {
-		const srcAspect = img.naturalWidth / img.naturalHeight;
-		const dstAspect = slotW / slotH;
-		let sw: number, sh: number;
-		if (srcAspect > dstAspect) {
-			sh = img.naturalHeight;
-			sw = sh * dstAspect;
-		} else {
-			sw = img.naturalWidth;
-			sh = sw / dstAspect;
-		}
+	): { maxShiftX: number; maxShiftY: number } {
+		// Sama dengan model render: foto di-cover ke slot lalu diskalakan zoom.
+		const cover = Math.max(slotW / img.naturalWidth, slotH / img.naturalHeight);
 		const zoom = Math.max(0.5, Math.min(4, scale));
-		sw /= zoom;
-		sh /= zoom;
+		const drawW = img.naturalWidth * cover * zoom;
+		const drawH = img.naturalHeight * cover * zoom;
+		// Saat foto lebih kecil dari slot (zoom out), ruang kosongnya tetap bisa digeser.
 		return {
-			sw,
-			sh,
-			maxPanX: Math.max(0, img.naturalWidth - sw),
-			maxPanY: Math.max(0, img.naturalHeight - sh)
+			maxShiftX: Math.abs(drawW - slotW) / 2,
+			maxShiftY: Math.abs(drawH - slotH) / 2
 		};
 	}
 
@@ -403,7 +394,7 @@
 		if (!photoDrag || !canvas) return;
 		const img = panImage(photos[photoDrag.photoIndex]);
 		if (!img || !img.complete || !img.naturalWidth) return;
-		const { sw, sh, maxPanX, maxPanY } = panBounds(
+		const { maxShiftX, maxShiftY } = panBounds(
 			img,
 			photoDrag.slotW,
 			photoDrag.slotH,
@@ -411,24 +402,18 @@
 		);
 		const rect = canvas.getBoundingClientRect();
 		const cssPerImage = rect.width / canvas.width;
-		const slotCssW = photoDrag.slotW * cssPerImage;
-		const slotCssH = photoDrag.slotH * cssPerImage;
 		const dxCss = e.clientX - photoDrag.startX;
 		const dyCss = e.clientY - photoDrag.startY;
 		if (!photoDrag.moved && Math.hypot(dxCss, dyCss) < 5) return;
 		photoDrag.moved = true;
-		// Drag ke kanan = gambar ikut ke kanan (sumber crop bergeser ke kiri).
-		// Tanpa ruang crop di sumbu itu, offset dibiarkan di batas supaya tidak melompat.
-		const dxImage = slotCssW > 0 ? (dxCss * sw) / slotCssW : 0;
-		const dyImage = slotCssH > 0 ? (dyCss * sh) / slotCssH : 0;
+		// Drag kanan = foto ikut kanan. Konversi CSS → px kanvas supaya gerak 1:1,
+		// termasuk saat zoom out (foto lebih kecil dari slot).
+		const dxCanvas = cssPerImage > 0 ? dxCss / cssPerImage : 0;
+		const dyCanvas = cssPerImage > 0 ? dyCss / cssPerImage : 0;
 		const offsetX =
-			maxPanX > 0
-				? photoDrag.startOffsetX - dxImage / maxPanX
-				: Math.max(-1, Math.min(1, photoDrag.startOffsetX - dxCss / Math.max(1, slotCssW)));
+			maxShiftX > 0 ? photoDrag.startOffsetX - dxCanvas / maxShiftX : photoDrag.startOffsetX;
 		const offsetY =
-			maxPanY > 0
-				? photoDrag.startOffsetY - dyImage / maxPanY
-				: Math.max(-1, Math.min(1, photoDrag.startOffsetY - dyCss / Math.max(1, slotCssH)));
+			maxShiftY > 0 ? photoDrag.startOffsetY - dyCanvas / maxShiftY : photoDrag.startOffsetY;
 		panPending = {
 			photoIndex: photoDrag.photoIndex,
 			offsetX: Math.max(-1, Math.min(1, offsetX)),

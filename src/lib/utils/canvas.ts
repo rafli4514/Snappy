@@ -229,9 +229,12 @@ export type RenderImage = HTMLImageElement | null;
  * Draw an image into a destination rectangle with cover cropping,
  * custom zoom scaling, and pan offsets.
  *
- * @param scale zoom factor (>= 1.0)
- * @param offsetX -0.5 to 0.5 relative pan X
- * @param offsetY -0.5 to 0.5 relative pan Y
+ * Zoom < 1 mengecilkan foto di dalam slot, jadi foto tetap bisa digeser
+ * (tidak hanya saat crop-nya lebih besar dari slot).
+ *
+ * @param scale zoom factor (0.5–4)
+ * @param offsetX -1 to 1 relative pan X
+ * @param offsetY -1 to 1 relative pan Y
  */
 export function drawCroppedImageWithTransform(
 	ctx: CanvasRenderingContext2D,
@@ -246,41 +249,32 @@ export function drawCroppedImageWithTransform(
 	rotation = 0,
 	flipH = false
 ): void {
-	const srcAspect = img.naturalWidth / img.naturalHeight;
-	const dstAspect = dw / dh;
-	let sw, sh;
-
-	if (srcAspect > dstAspect) {
-		// Source is wider than destination -> match height, crop sides
-		sh = img.naturalHeight;
-		sw = sh * dstAspect;
-	} else {
-		// Source is taller than destination -> match width, crop top/bottom
-		sw = img.naturalWidth;
-		sh = sw / dstAspect;
-	}
-
-	// Zoom scale: higher scale samples smaller area of source
+	// Skala "cover" membuat foto tepat memenuhi slot di zoom 1.
+	const cover = Math.max(dw / img.naturalWidth, dh / img.naturalHeight);
 	const zoom = Math.max(0.5, Math.min(4.0, scale));
-	sw = sw / zoom;
-	sh = sh / zoom;
+	const drawW = img.naturalWidth * cover * zoom;
+	const drawH = img.naturalHeight * cover * zoom;
 
-	// Center coordinates plus pan offset
-	const maxPanX = Math.max(0, img.naturalWidth - sw);
-	const maxPanY = Math.max(0, img.naturalHeight - sh);
+	// Ruang gerak tiap sumbu: sisa crop saat foto lebih besar,
+	// atau ruang kosong di dalam slot saat foto lebih kecil (zoom out).
+	const maxShiftX = Math.abs(drawW - dw) / 2;
+	const maxShiftY = Math.abs(drawH - dh) / 2;
 
-	const cx = (img.naturalWidth - sw) / 2;
-	const cy = (img.naturalHeight - sh) / 2;
+	// Offset positif = foto bergeser ke kiri/atas (kompatibel dengan crop lama).
+	const ox = Math.max(-1, Math.min(1, offsetX));
+	const oy = Math.max(-1, Math.min(1, offsetY));
+	const shiftX = -ox * maxShiftX;
+	const shiftY = -oy * maxShiftY;
 
-	const sx = Math.max(0, Math.min(maxPanX, cx + offsetX * maxPanX));
-	const sy = Math.max(0, Math.min(maxPanY, cy + offsetY * maxPanY));
+	const x = dx + (dw - drawW) / 2 + shiftX;
+	const y = dy + (dh - drawH) / 2 + shiftY;
 
 	ctx.save();
 	ctx.translate(dx + dw / 2, dy + dh / 2);
 	ctx.rotate((rotation * Math.PI) / 180);
 	if (flipH) ctx.scale(-1, 1);
 	ctx.translate(-(dx + dw / 2), -(dy + dh / 2));
-	ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+	ctx.drawImage(img, x, y, drawW, drawH);
 	ctx.restore();
 }
 
