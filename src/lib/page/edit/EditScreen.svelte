@@ -1065,12 +1065,13 @@
 
 	.categories-header {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 4px;
 		padding: 8px 10px 6px;
 	}
 
 	.category-pill {
+		min-width: 0;
 		min-height: 44px;
 		padding: 6px 10px;
 		border-radius: 999px;
