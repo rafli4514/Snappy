@@ -1,6 +1,6 @@
 # DESIGN.md — DISTUDIO Photobooth
 
-Arah desain disusun dari jawaban dan referensi visual yang diberikan pemilik proyek (pemilik = sumbernya; file ini transkripsinya). Referensi terakhir: layar mulai kios gelap dramatis (mood Funcam), diadaptasi, bukan diklona.
+Arah desain disusun dari jawaban dan referensi visual yang diberikan pemilik proyek (pemilik = sumbernya; file ini transkripsinya). Referensi terakhir: layar mulai kios gelap dramatis, diadaptasi, bukan diklona.
 
 ## Identity
 

@@ -1,13 +1,13 @@
 /**
- * Funcam Booth — Filter Recipes
- * Categories: Essential / Retro / Fun / Distort / Black & White
- * Exact FFmpeg filter strings extracted from the binary §6.
- * Default selected filter = 'original' (no filter applied).
+ * Resep filter foto
+ * Kategori: Essential / Retro / Fun / Distort / Black & White
+ * Nilai filter FFmpeg untuk render final, plus CSS filter untuk pratinjau.
+ * Filter default = 'original' (tanpa filter).
  */
 
 export type FilterCategory = 'Essential' | 'Retro' | 'Fun' | 'Distort' | 'Black & White';
 
-export interface FuncamFilter {
+export interface PhotoFilter {
 	/** Filter key used as the store value (matches PhotoDefaultFilter). */
 	key: string;
 	/** Human-readable label. */
@@ -26,7 +26,7 @@ export interface FuncamFilter {
 	ffmpeg: string;
 }
 
-export const FUNCAM_FILTERS: FuncamFilter[] = [
+export const PHOTO_FILTERS: PhotoFilter[] = [
 	// ─── Essential ───────────────────────────────────────────────
 	{
 		key: 'original',
@@ -123,15 +123,15 @@ export const FUNCAM_FILTERS: FuncamFilter[] = [
 ];
 
 /** Group filters by category for display. */
-export function getFilterGroups(): Record<FilterCategory, FuncamFilter[]> {
-	const groups: Record<FilterCategory, FuncamFilter[]> = {
+export function getFilterGroups(): Record<FilterCategory, PhotoFilter[]> {
+	const groups: Record<FilterCategory, PhotoFilter[]> = {
 		Essential: [],
 		Retro: [],
 		Fun: [],
 		Distort: [],
 		'Black & White': []
 	};
-	for (const f of FUNCAM_FILTERS) {
+	for (const f of PHOTO_FILTERS) {
 		groups[f.category].push(f);
 	}
 	return groups;

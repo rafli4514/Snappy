@@ -1,10 +1,10 @@
 /**
- * Funcam Booth — Sticker Seed (13 Pixel stickers)
- * Exact IDs, names and pixel dimensions from the binary seed table.
- * Numbers 2, 4, 5, 7, 8, 9 are absent — do not invent.
+ * Seed aset stiker (13 aset pixel)
+ * ID, nama, dan dimensi px dari tabel seed.
+ * Angka 2, 4, 5, 7, 8, 9 tidak ada — jangan dibuat.
  */
 
-export interface FuncamSticker {
+export interface StickerAsset {
 	/** Internal DB id (from seed). */
 	dbId: number;
 	/** Display name. */
@@ -16,7 +16,7 @@ export interface FuncamSticker {
 	/** Whether this sticker is active. */ active: boolean;
 }
 
-export const FUNCAM_STICKERS: FuncamSticker[] = [
+export const STICKER_ASSETS: StickerAsset[] = [
 	{ dbId: 10, name: 'Sticker 1', file: 'Sticker 1.webp', size: { w: 212, h: 200 }, active: true },
 	{ dbId: 12, name: 'Sticker 3', file: '3.webp', size: { w: 202, h: 200 }, active: true },
 	{ dbId: 15, name: 'Sticker 6', file: '6.webp', size: { w: 202, h: 200 }, active: true },
@@ -34,10 +34,10 @@ export const FUNCAM_STICKERS: FuncamSticker[] = [
 
 /** Return only active stickers. */
 export function getActiveStickers() {
-	return FUNCAM_STICKERS.filter((s) => s.active);
+	return STICKER_ASSETS.filter((s) => s.active);
 }
 
 /** Get a sticker by display name. */
-export function findStickerByName(name: string): FuncamSticker | undefined {
-	return FUNCAM_STICKERS.find((s) => s.name === name);
+export function findStickerByName(name: string): StickerAsset | undefined {
+	return STICKER_ASSETS.find((s) => s.name === name);
 }

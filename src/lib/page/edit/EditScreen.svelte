@@ -13,8 +13,8 @@
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
 	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
-	import { FUNCAM_STICKERS, type FuncamSticker } from '#lib/data/funcamStickers';
-	import { FUNCAM_FILTERS } from '#lib/data/funcamFilters';
+	import { STICKER_ASSETS, type StickerAsset } from '#lib/data/stickers';
+	import { PHOTO_FILTERS } from '#lib/data/filters';
 	import type { BuiltinSticker, PhotoTransform, StickerLayer } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -48,24 +48,24 @@
 	let showSlotNumbers = true;
 	let renderSeq = 0;
 
-	// Filter data dari FUNCAM_FILTERS (5 kategori, exact recipe)
+	// Filter foto: 5 kategori.
 	const FILTER_GROUPS = [
 		{
 			label: 'Essential',
 			key: 'essential',
-			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Essential')
+			filters: PHOTO_FILTERS.filter((f) => f.category === 'Essential')
 		},
-		{ label: 'Retro', key: 'retro', filters: FUNCAM_FILTERS.filter((f) => f.category === 'Retro') },
-		{ label: 'Fun', key: 'fun', filters: FUNCAM_FILTERS.filter((f) => f.category === 'Fun') },
+		{ label: 'Retro', key: 'retro', filters: PHOTO_FILTERS.filter((f) => f.category === 'Retro') },
+		{ label: 'Fun', key: 'fun', filters: PHOTO_FILTERS.filter((f) => f.category === 'Fun') },
 		{
 			label: 'Distort',
 			key: 'distort',
-			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Distort')
+			filters: PHOTO_FILTERS.filter((f) => f.category === 'Distort')
 		},
 		{
 			label: 'B&W',
 			key: 'bw',
-			filters: FUNCAM_FILTERS.filter((f) => f.category === 'Black & White')
+			filters: PHOTO_FILTERS.filter((f) => f.category === 'Black & White')
 		}
 	];
 
@@ -183,12 +183,12 @@
 		dragStickerId = null;
 	}
 
-	function handleAddFuncamSticker(sticker: FuncamSticker): void {
-		// Build a placeholder SVG sticker from the FuncamSticker metadata
+	function handleAddSticker(sticker: StickerAsset): void {
+		// Build a placeholder SVG sticker from the StickerAsset metadata
 		// Real WebP assets will be dropped in static/stickers/Pixel/ later
 		const layer: StickerLayer = {
-			id: `funcam-${sticker.dbId}-${Date.now()}`,
-			stickerId: `funcam-${sticker.dbId}`,
+			id: `sticker-${sticker.dbId}-${Date.now()}`,
+			stickerId: `sticker-${sticker.dbId}`,
 			x: Math.max(0, 0.5 - 0.25),
 			y: 0.1,
 			w: sticker.size.w / 600,
@@ -635,11 +635,11 @@
 			{:else}
 				<div class="tab-panel">
 					<div class="tab-photo-list">
-						{#each FUNCAM_STICKERS as s (s.dbId)}
+						{#each STICKER_ASSETS as s (s.dbId)}
 							<button
 								type="button"
 								class="tab-action-btn font-mono"
-								on:click={() => handleAddFuncamSticker(s)}
+								on:click={() => handleAddSticker(s)}
 							>
 								✦ {s.name}
 							</button>
