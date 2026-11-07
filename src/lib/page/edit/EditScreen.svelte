@@ -41,6 +41,9 @@
 	$: zoomValue = Math.round((selectedTransform?.scale ?? 1) * 100);
 	$: posXValue = Math.round((selectedTransform?.offsetX ?? 0) * 100);
 	$: posYValue = Math.round((selectedTransform?.offsetY ?? 0) * 100);
+	$: zoomAtDefault = (selectedTransform?.scale ?? 1) === 1;
+	$: posXAtDefault = (selectedTransform?.offsetX ?? 0) === 0;
+	$: posYAtDefault = (selectedTransform?.offsetY ?? 0) === 0;
 
 	type PanelTab = 'foto' | 'filter' | 'sticker';
 	let activeTab: PanelTab = 'foto';
@@ -153,6 +156,28 @@
 		// Geser posisi tidak boleh menyentuh zoom: nilai Zoom milik user.
 		if (axis === 'x') updatePhotoTransform(selectedPhoto, { ...t, offsetX: v });
 		else updatePhotoTransform(selectedPhoto, { ...t, offsetY: v });
+	}
+
+	/** Reset satu field transform foto terpilih; field lain tetap seperti semula. */
+	type ResettableField = 'rotation' | 'scale' | 'offsetX' | 'offsetY';
+
+	function resetTransformField(field: ResettableField): void {
+		const next: PhotoTransform = { ...(transformFor(selectedPhoto) ?? {}) };
+		switch (field) {
+			case 'rotation':
+				next.rotation = 0;
+				break;
+			case 'scale':
+				next.scale = 1;
+				break;
+			case 'offsetX':
+				next.offsetX = 0;
+				break;
+			case 'offsetY':
+				next.offsetY = 0;
+				break;
+		}
+		updatePhotoTransform(selectedPhoto, next);
 	}
 
 	function startStickerDrag(id: string): void {
@@ -589,38 +614,90 @@
 							aria-label="Flip horizontal">⇋ Flip</button
 						>
 					</div>
-					<label class="tab-slider">
-						<span class="font-mono">Putar</span>
-						<input type="range" min={0} max={359} value={rotationValue} on:input={handleRotation} />
-						<span class="font-mono">{rotationValue}°</span>
-					</label>
-					<label class="tab-slider">
-						<span class="font-mono">Zoom</span>
-						<input type="range" min={50} max={200} value={zoomValue} on:input={handleZoom} />
-						<span class="font-mono">{zoomValue}%</span>
-					</label>
-					<label class="tab-slider">
-						<span class="font-mono">Posisi X</span>
-						<input
-							type="range"
-							min={-100}
-							max={100}
-							value={posXValue}
-							on:input={(e) => handleOffsetSlider('x', e)}
-						/>
-						<span class="font-mono">{posXValue}</span>
-					</label>
-					<label class="tab-slider">
-						<span class="font-mono">Posisi Y</span>
-						<input
-							type="range"
-							min={-100}
-							max={100}
-							value={posYValue}
-							on:input={(e) => handleOffsetSlider('y', e)}
-						/>
-						<span class="font-mono">{posYValue}</span>
-					</label>
+					<div class="transform-row">
+						<label class="tab-slider" for="tf-rotation">
+							<span class="font-mono">Putar</span>
+							<input
+								id="tf-rotation"
+								type="range"
+								min={0}
+								max={359}
+								value={rotationValue}
+								on:input={handleRotation}
+							/>
+							<span class="font-mono">{rotationValue}°</span>
+						</label>
+						<button
+							type="button"
+							class="tab-reset-btn font-mono"
+							on:click={() => resetTransformField('rotation')}
+							disabled={rotationValue === 0}
+							aria-label="Reset putaran foto {selectedPhoto + 1}">Reset</button
+						>
+					</div>
+					<div class="transform-row">
+						<label class="tab-slider" for="tf-zoom">
+							<span class="font-mono">Zoom</span>
+							<input
+								id="tf-zoom"
+								type="range"
+								min={50}
+								max={200}
+								value={zoomValue}
+								on:input={handleZoom}
+							/>
+							<span class="font-mono">{zoomValue}%</span>
+						</label>
+						<button
+							type="button"
+							class="tab-reset-btn font-mono"
+							on:click={() => resetTransformField('scale')}
+							disabled={zoomAtDefault}
+							aria-label="Reset zoom foto {selectedPhoto + 1}">Reset</button
+						>
+					</div>
+					<div class="transform-row">
+						<label class="tab-slider" for="tf-offset-x">
+							<span class="font-mono">Posisi X</span>
+							<input
+								id="tf-offset-x"
+								type="range"
+								min={-100}
+								max={100}
+								value={posXValue}
+								on:input={(e) => handleOffsetSlider('x', e)}
+							/>
+							<span class="font-mono">{posXValue}</span>
+						</label>
+						<button
+							type="button"
+							class="tab-reset-btn font-mono"
+							on:click={() => resetTransformField('offsetX')}
+							disabled={posXAtDefault}
+							aria-label="Reset posisi X foto {selectedPhoto + 1}">Reset</button
+						>
+					</div>
+					<div class="transform-row">
+						<label class="tab-slider" for="tf-offset-y">
+							<span class="font-mono">Posisi Y</span>
+							<input
+								id="tf-offset-y"
+								type="range"
+								min={-100}
+								max={100}
+								value={posYValue}
+								on:input={(e) => handleOffsetSlider('y', e)}
+							/>
+							<span class="font-mono">{posYValue}</span>
+						</label>
+						<button
+							type="button"
+							class="tab-reset-btn font-mono"
+							on:click={() => resetTransformField('offsetY')}
+							disabled={posYAtDefault}
+							aria-label="Reset posisi Y foto {selectedPhoto + 1}">Reset</button
+						>
+					</div>
 				</div>
 			{:else if activeTab === 'filter'}
 				<div class="tab-panel">
@@ -1083,11 +1160,67 @@
 		padding: 10px;
 		border: 1px solid var(--hairline);
 		border-radius: 8px;
+		min-height: 44px;
+		box-sizing: border-box;
 	}
 
 	.tab-slider input[type='range'] {
 		flex: 1;
+		min-width: 0;
 		accent-color: var(--fg);
+	}
+
+	.tab-slider input[type='range']:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.transform-row {
+		display: flex;
+		align-items: stretch;
+		gap: 8px;
+	}
+
+	.transform-row .tab-slider {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.tab-reset-btn {
+		flex-shrink: 0;
+		min-width: 52px;
+		min-height: 44px;
+		padding: 0 8px;
+		border: 1px solid var(--hairline);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--fg-dim);
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease,
+			background-color 160ms ease,
+			opacity 160ms ease;
+	}
+
+	.tab-reset-btn:hover:not(:disabled) {
+		color: var(--fg);
+		border-color: var(--fg);
+		background: var(--ring-line);
+	}
+
+	.tab-reset-btn:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.tab-reset-btn:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
 	}
 
 	.tab-photo-list {
