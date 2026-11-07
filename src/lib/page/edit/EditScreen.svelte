@@ -150,11 +150,9 @@
 	): void {
 		const t = transformFor(selectedPhoto) ?? {};
 		const v = Number(e.currentTarget.value) / 100;
-		// Geser posisi butuh ruang crop; kalau zoom masih pas (1x), naikkan sedikit
-		// supaya offset X/Y terlihat efeknya.
-		const scale = v !== 0 && (t.scale ?? 1) < 1.05 ? Math.max(t.scale ?? 1, 1.15) : (t.scale ?? 1);
-		if (axis === 'x') updatePhotoTransform(selectedPhoto, { ...t, scale, offsetX: v });
-		else updatePhotoTransform(selectedPhoto, { ...t, scale, offsetY: v });
+		// Geser posisi tidak boleh menyentuh zoom: nilai Zoom milik user.
+		if (axis === 'x') updatePhotoTransform(selectedPhoto, { ...t, offsetX: v });
+		else updatePhotoTransform(selectedPhoto, { ...t, offsetY: v });
 	}
 
 	function startStickerDrag(id: string): void {
@@ -219,6 +217,8 @@
 		slotY: number;
 		slotW: number;
 		slotH: number;
+		/** Zoom bawaan slot (custom template) — dasar hitung ruang pan. */
+		slotScale: number;
 	}
 
 	function photoHitAtPoint(clientX: number, clientY: number): PhotoHit | null {
@@ -261,7 +261,8 @@
 						slotX: sx,
 						slotY: sy,
 						slotW: sw,
-						slotH: sh
+						slotH: sh,
+						slotScale: s.scale ?? 1
 					};
 				}
 			}
@@ -284,7 +285,14 @@
 			for (const cell of row.cells) {
 				const w = cell.w * k;
 				if (px >= cursorX && px <= cursorX + w && py >= cursorY && py <= cursorY + rowH) {
-					return { photoIndex: slotIdx, slotX: cursorX, slotY: cursorY, slotW: w, slotH: rowH };
+					return {
+						photoIndex: slotIdx,
+						slotX: cursorX,
+						slotY: cursorY,
+						slotW: w,
+						slotH: rowH,
+						slotScale: 1
+					};
 				}
 				slotIdx += 1;
 				cursorX += w + p.gap * k;
@@ -339,6 +347,8 @@
 		photoIndex: number;
 		slotW: number;
 		slotH: number;
+		/** Zoom dasar saat gesture mulai — dipakai hitung ruang pan, tidak diubah. */
+		baseScale: number;
 		startX: number;
 		startY: number;
 		startOffsetX: number;
@@ -352,13 +362,12 @@
 			photoDrag = null;
 			return;
 		}
-		// Klik atau geser — fotonya langsung terpilih (transform berikutnya berlaku ke foto ini)
-		selectedPhoto = hit.photoIndex;
 		const t = photoTransforms[hit.photoIndex] ?? {};
 		photoDrag = {
 			photoIndex: hit.photoIndex,
 			slotW: hit.slotW,
 			slotH: hit.slotH,
+			baseScale: typeof t.scale === 'number' ? t.scale : hit.slotScale,
 			startX: e.clientX,
 			startY: e.clientY,
 			startOffsetX: typeof t.offsetX === 'number' ? t.offsetX : 0,
@@ -379,30 +388,27 @@
 		photoIndex: number;
 		offsetX: number;
 		offsetY: number;
-		scale?: number;
 	} | null = null;
 
 	function flushPan(): void {
 		panRaf = null;
 		if (!panPending) return;
-		const { photoIndex, offsetX, offsetY, scale } = panPending;
+		const { photoIndex, offsetX, offsetY } = panPending;
 		const t = photoTransforms[photoIndex] ?? {};
-		updatePhotoTransform(photoIndex, {
-			...t,
-			offsetX,
-			offsetY,
-			...(scale !== undefined ? { scale } : {})
-		});
+		updatePhotoTransform(photoIndex, { ...t, offsetX, offsetY });
 		panPending = null;
 	}
 
 	function handleCanvasPointerMove(e: PointerEvent): void {
 		if (!photoDrag || !canvas) return;
-		const t = photoTransforms[photoDrag.photoIndex] ?? {};
 		const img = panImage(photos[photoDrag.photoIndex]);
 		if (!img || !img.complete || !img.naturalWidth) return;
-		let scale = t.scale ?? 1;
-		let { sw, sh, maxPanX, maxPanY } = panBounds(img, photoDrag.slotW, photoDrag.slotH, scale);
+		const { sw, sh, maxPanX, maxPanY } = panBounds(
+			img,
+			photoDrag.slotW,
+			photoDrag.slotH,
+			photoDrag.baseScale
+		);
 		const rect = canvas.getBoundingClientRect();
 		const cssPerImage = rect.width / canvas.width;
 		const slotCssW = photoDrag.slotW * cssPerImage;
@@ -411,16 +417,8 @@
 		const dyCss = e.clientY - photoDrag.startY;
 		if (!photoDrag.moved && Math.hypot(dxCss, dyCss) < 5) return;
 		photoDrag.moved = true;
-		// Geser butuh ruang crop; kalau ruang habis (zoom 1x, aspek pas), naikkan
-		// zoom sedikit agar offset X/Y punya efek visual.
-		if ((maxPanX <= 0 && Math.abs(dxCss) > 0) || (maxPanY <= 0 && Math.abs(dyCss) > 0)) {
-			const bumped = Math.max(scale, 1.15);
-			if (bumped !== scale) {
-				scale = bumped;
-				({ sw, sh, maxPanX, maxPanY } = panBounds(img, photoDrag.slotW, photoDrag.slotH, scale));
-			}
-		}
-		// Drag ke kanan = gambar ikut ke kanan (sumber crop bergeser ke kiri)
+		// Drag ke kanan = gambar ikut ke kanan (sumber crop bergeser ke kiri).
+		// Tanpa ruang crop di sumbu itu, offset dibiarkan di batas supaya tidak melompat.
 		const dxImage = slotCssW > 0 ? (dxCss * sw) / slotCssW : 0;
 		const dyImage = slotCssH > 0 ? (dyCss * sh) / slotCssH : 0;
 		const offsetX =
@@ -434,14 +432,16 @@
 		panPending = {
 			photoIndex: photoDrag.photoIndex,
 			offsetX: Math.max(-1, Math.min(1, offsetX)),
-			offsetY: Math.max(-1, Math.min(1, offsetY)),
-			...(scale !== (t.scale ?? 1) ? { scale } : {})
+			offsetY: Math.max(-1, Math.min(1, offsetY))
 		};
 		if (panRaf === null) panRaf = requestAnimationFrame(flushPan);
 	}
 
 	function handleCanvasPointerUp(e: PointerEvent): void {
 		if (photoDrag) {
+			// Klik (tanpa geser) memilih foto; drag hanya menggeser crop foto itu,
+			// jadi nilai Zoom di panel tidak ikut berpindah.
+			if (!photoDrag.moved) selectedPhoto = photoDrag.photoIndex;
 			// Terapkan sisa pan yang belum sempat di-flush rAF
 			if (panRaf !== null) {
 				cancelAnimationFrame(panRaf);
