@@ -31,6 +31,7 @@
 	$: photoTransforms = $session.photoTransforms;
 	$: stickers = $session.stickers;
 	$: photoFilter = $session.photoFilter;
+	$: photoFilterCss = PHOTO_FILTERS.find((f) => f.key === photoFilter)?.cssFilter ?? 'none';
 
 	$: activeTemplate = activeFrame
 		? frameToTemplate(activeFrame)
@@ -95,7 +96,7 @@
 				showSlotNumbers,
 				photoTransforms,
 				stickers,
-				photoFilter,
+				photoFilter: photoFilterCss,
 				selectedSlot: selectedPhoto,
 				formatId: $session.formatId
 			},
