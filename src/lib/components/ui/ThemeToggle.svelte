@@ -7,6 +7,8 @@
 	import { session, setTheme } from '#lib/stores/session';
 	import { Moon, Sun } from '@lucide/svelte';
 
+	export let inline = false;
+
 	$: theme = $session.theme;
 
 	function toggleTheme(): void {
@@ -17,6 +19,7 @@
 <button
 	type="button"
 	class="theme-toggle"
+	class:is-inline={inline}
 	on:click={toggleTheme}
 	aria-label={theme === 'dark' ? 'light' : 'dark'}
 	title="change theme"
@@ -49,6 +52,12 @@
 			border-color 160ms ease,
 			color 160ms ease,
 			transform 160ms ease;
+	}
+
+	.theme-toggle.is-inline {
+		position: static;
+		width: 40px;
+		height: 40px;
 	}
 
 	.theme-toggle:hover {

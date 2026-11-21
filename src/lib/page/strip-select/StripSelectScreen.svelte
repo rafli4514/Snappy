@@ -1,121 +1,194 @@
 <script lang="ts">
 	import { session, goTo, setFormat, setPhotoCount } from '#lib/stores/session';
-	import { STANDARD_FORMATS, formatById } from '#lib/data/standardFormats';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
 
-	const format = $derived(formatById($session.formatId));
-	const allowedCounts = $derived(format.photos);
-
-	function chooseFormat(id: string): void {
-		setFormat(id);
+	interface StripOption {
+		id: string;
+		eyebrow: string;
+		title: string;
+		spec: string;
+		image: string;
+		formatId: string;
+		photoCount: number;
 	}
 
-	function chooseCount(n: number): void {
-		setPhotoCount(n);
+	const STRIP_OPTIONS: StripOption[] = [
+		{
+			id: '01-2x6-3foto',
+			eyebrow: 'STRIP KLASIK',
+			title: '2×6 · 3 FOTO',
+			spec: 'Strip Tunggal · 3 Frame Besar · 2 × 6 in',
+			image: '/strip-select/01-2x6-3foto.png',
+			formatId: '2x6',
+			photoCount: 3
+		},
+		{
+			id: '02-2x6-4foto',
+			eyebrow: 'PALING POPULER',
+			title: '2×6 · 4 FOTO',
+			spec: 'Strip Tunggal · 4 Frame · 2 × 6 in',
+			image: '/strip-select/02-2x6-4foto.png',
+			formatId: '2x6',
+			photoCount: 4
+		},
+		{
+			id: '03-2x8-4foto',
+			eyebrow: 'STRIP TINGGI',
+			title: '2×8 · 4 FOTO',
+			spec: 'Strip Tinggi · 4 Frame Besar · 2 × 8 in',
+			image: '/strip-select/03-2x8-4foto.png',
+			formatId: '2x8',
+			photoCount: 4
+		},
+		{
+			id: '04-2x8-5foto',
+			eyebrow: 'STRIP TINGGI',
+			title: '2×8 · 5 FOTO',
+			spec: 'Strip Tinggi · 5 Frame · 2 × 8 in',
+			image: '/strip-select/04-2x8-5foto.png',
+			formatId: '2x8',
+			photoCount: 5
+		},
+		{
+			id: '05-4r-double',
+			eyebrow: 'CETAK GANDA',
+			title: '4R DOUBLE',
+			spec: '2 Strip × 4 Frame · 4 × 6 in',
+			image: '/strip-select/05-4r-double.png',
+			formatId: '4r-double',
+			photoCount: 4
+		},
+		{
+			id: '06-4r-6foto',
+			eyebrow: 'KOLASE 4R',
+			title: '4R · 6 FOTO',
+			spec: 'Grid 3×2 · 6 Frame · 4 × 6 in',
+			image: '/strip-select/06-4r-6foto.png',
+			formatId: '4r-double',
+			photoCount: 6
+		},
+		{
+			id: '07-3r-portrait-3foto',
+			eyebrow: 'KARTU POTRET',
+			title: '3R PORTRAIT',
+			spec: '1 Utama + 2 Frame · 3.5 × 5 in',
+			image: '/strip-select/07-3r-portrait-3foto.png',
+			formatId: '3r',
+			photoCount: 3
+		},
+		{
+			id: '08-5r-portrait-4foto',
+			eyebrow: 'POTRET BESAR',
+			title: '5R PORTRAIT',
+			spec: 'Grid Potret 2×2 · 5 × 7 in',
+			image: '/strip-select/08-5r-portrait-4foto.png',
+			formatId: '5r',
+			photoCount: 4
+		},
+		{
+			id: '09-square-1x1-4foto',
+			eyebrow: 'CETAK PERSEGI',
+			title: 'SQUARE 1:1',
+			spec: 'Grid Persegi 2×2 · 4 × 4 in',
+			image: '/strip-select/09-square-1x1-4foto.png',
+			formatId: 'square',
+			photoCount: 4
+		}
+	];
+
+	let navTimer: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		return () => {
+			if (navTimer) clearTimeout(navTimer);
+		};
+	});
+
+	function isSelected(option: StripOption): boolean {
+		return $session.formatId === option.formatId && $session.photoCount === option.photoCount;
 	}
 
-	function handleAmbil(): void {
-		goTo('camera');
+	function handleSelect(option: StripOption): void {
+		setFormat(option.formatId);
+		setPhotoCount(option.photoCount);
+		if (navTimer) clearTimeout(navTimer);
+		navTimer = setTimeout(() => {
+			navTimer = null;
+			goTo('camera');
+		}, 160);
 	}
 </script>
 
 <section
 	class="strip-select-screen screen-enter kiosk-scope"
 	class:theme-light={$session.theme === 'light'}
-	aria-label="Pilih format dan jumlah foto"
+	aria-label="Tata letak strip foto"
 >
-	<button
-		class="back-btn font-mono"
-		onclick={() => goTo('start')}
-		aria-label="Kembali ke halaman awal"
-	>
-		<svg
-			viewBox="0 0 24 24"
-			width="14"
-			height="14"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M14.5 5l-7 7 7 7" />
-		</svg>
-		KEMBALI
-	</button>
+	<img
+		class="bg-frame"
+		src="/strip-select/bg-frame.png"
+		alt=""
+		aria-hidden="true"
+		draggable="false"
+	/>
 
-	<ThemeToggle />
-
-	<header class="kepala">
-		<h2 class="judul font-display">PILIH FORMAT</h2>
-	</header>
-
-	<div class="format-rail" role="tablist" aria-label="Format cetak">
-		{#each STANDARD_FORMATS as f (f.id)}
-			<button
-				type="button"
-				class="format-card"
-				class:is-active={$session.formatId === f.id}
-				onclick={() => chooseFormat(f.id)}
-				role="tab"
-				aria-selected={$session.formatId === f.id}
-				aria-label={`${f.label}, ${f.cm}`}
-			>
-				<span
-					class="format-thumb"
-					style="height: {Math.round((124 * f.pxH) / f.pxW)}px;"
-					aria-hidden="true"
+	<div class="frame-inner">
+		<header class="top-bar">
+			<div class="bar-left">
+				<button
+					type="button"
+					class="brand-back-btn"
+					onclick={() => goTo('start')}
+					aria-label="Kembali ke halaman awal"
+					title="Kembali ke halaman awal"
 				>
-					<span class="format-thumb-label">{f.label.split('·')[0].trim()}</span>
-				</span>
-				<span class="format-meta">
-					<span class="format-name">{f.label}</span>
-					<span class="format-sub font-mono"
-						>{f.cm} · {f.kind === 'digital' ? 'DIGITAL' : 'CETAK'}</span
-					>
-				</span>
-			</button>
-		{/each}
-	</div>
+					<img
+						class="brand-logo"
+						src="/landingPage/logo.svg"
+						alt="DI'STUDIO"
+						width="217"
+						height="81"
+						draggable="false"
+					/>
+				</button>
+			</div>
 
-	<div class="count-row" role="group" aria-label="Jumlah foto">
-		{#each allowedCounts as n (n)}
-			<button
-				type="button"
-				class="count-btn font-mono"
-				class:is-active={$session.photoCount === n}
-				onclick={() => chooseCount(n)}
-				aria-pressed={$session.photoCount === n}
-			>
-				{n} FOTO
-			</button>
-		{/each}
-	</div>
+			<h1 class="screen-title">STRIP KAMU</h1>
 
-	<div class="aksi">
-		<button
-			type="button"
-			class="ambil-cta btn font-mono"
-			onclick={handleAmbil}
-			aria-label="Ambil foto sekarang"
-		>
-			AMBIL FOTO
-			<svg
-				viewBox="0 0 24 24"
-				width="18"
-				height="18"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<path d="M4 12h15" />
-				<path d="M13 6l6 6-6 6" />
-			</svg>
-		</button>
+			<div class="bar-right">
+				<ThemeToggle inline />
+			</div>
+		</header>
+
+		<div class="header-divider" aria-hidden="true"></div>
+
+		<div class="strip-grid" role="list" aria-label="Daftar tata letak strip">
+			{#each STRIP_OPTIONS as option (option.id)}
+				{@const selected = isSelected(option)}
+				<button
+					type="button"
+					class="strip-card"
+					class:is-selected={selected}
+					onclick={() => handleSelect(option)}
+					aria-pressed={selected}
+					aria-label={`${option.title}, ${option.spec}`}
+				>
+					<span class="strip-thumb-box" aria-hidden="true">
+						<img class="strip-thumb" src={option.image} alt="" draggable="false" />
+					</span>
+
+					<span class="strip-meta">
+						<span class="strip-eyebrow">{option.eyebrow}</span>
+						<span class="strip-title">{option.title}</span>
+						<span class="strip-spec">{option.spec}</span>
+					</span>
+				</button>
+			{/each}
+		</div>
+
+		<footer class="bottom-hint">
+			<p>Ketuk salah satu tata letak strip di atas untuk memulai sesi fotobooth</p>
+		</footer>
 	</div>
 </section>
 

@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { setServerSession } from '#lib/services/galleryStore';
+import { listServerSessions, setServerSession } from '#lib/server/galleryStore';
 import type { GallerySession } from '#lib/types';
 import type { RequestHandler } from './$types';
 
@@ -18,6 +18,14 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 };
 
-export const GET: RequestHandler = () => {
+export const GET: RequestHandler = ({ url }) => {
+	const list = url.searchParams.get('list') === '1';
+	if (list) {
+		const rawLimit = Number(url.searchParams.get('limit') ?? 50);
+		const limit =
+			Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 200) : 50;
+		const sessions = listServerSessions(limit);
+		return json({ ok: true, sessions });
+	}
 	return json({ ok: true, message: 'DISTUDIO Gallery API' });
 };

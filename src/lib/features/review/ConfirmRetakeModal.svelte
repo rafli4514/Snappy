@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { session } from '#lib/stores/session';
 
 	const dispatch = createEventDispatcher<{ confirm: void }>();
 
@@ -12,190 +13,292 @@
 		dialog.showModal();
 	}
 
+	function handleBackdropClick(e: MouseEvent): void {
+		if (e.target === dialog) {
+			dialog.close();
+		}
+	}
+
 	function yes(): void {
 		dialog.close();
 		dispatch('confirm');
 	}
 </script>
 
-<dialog bind:this={dialog} class="confirm-modal" aria-labelledby="retake-all-title">
-	<div class="confirm-box">
-		<div class="confirm-icon" aria-hidden="true">
-			<svg
-				viewBox="0 0 24 24"
-				width="26"
-				height="26"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M1 4v6h6" />
-				<path d="M23 20v-6h-6" />
-				<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15" />
-			</svg>
-		</div>
-		<h2 id="retake-all-title" class="confirm-title font-display">Ambil Ulang Semua?</h2>
-		<p class="confirm-body">
-			{count > 0
-				? `Semua ${count} foto yang sudah diambil akan dihapus, `
-				: 'Semua foto yang sudah diambil akan dihapus, '}lalu sesi jepret dimulai dari awal.
-		</p>
-		<p class="confirm-note font-mono">Foto tidak bisa dikembalikan</p>
-		<div class="confirm-actions">
+<dialog
+	bind:this={dialog}
+	class="confirm-modal"
+	class:theme-light={$session.theme === 'light'}
+	aria-labelledby="retake-all-title"
+	on:click={handleBackdropClick}
+>
+	<div class="confirm-card">
+		<div class="card-head">
+			<h2 id="retake-all-title" class="title">AMBIL ULANG SEMUA?</h2>
 			<form method="dialog">
-				<button type="submit" class="ghost-btn font-mono">Batal</button>
+				<button type="submit" class="close-btn" aria-label="Tutup">
+					<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						aria-hidden="true"
+					>
+						<path d="M6 6l12 12M18 6L6 18" />
+					</svg>
+				</button>
 			</form>
-			<button type="button" class="capsule-btn font-mono" on:click={yes}>
-				<svg
-					viewBox="0 0 24 24"
-					width="13"
-					height="13"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M1 4v6h6" />
-					<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
-				</svg>
-				Ya, Ambil Ulang
-			</button>
+		</div>
+
+		<div class="head-divider" aria-hidden="true"></div>
+
+		<div class="card-body">
+			<p class="desc">
+				{count > 0
+					? `Semua ${count} foto yang sudah diambil akan dihapus, lalu sesi kamera dimulai dari awal.`
+					: 'Semua foto yang sudah diambil akan dihapus, lalu sesi kamera dimulai dari awal.'}
+			</p>
+		</div>
+
+		<div class="card-actions">
+			<form method="dialog">
+				<button type="submit" class="btn-outline">Batal</button>
+			</form>
+			<button type="button" class="btn-solid" on:click={yes}> Ya, Ambil Ulang </button>
 		</div>
 	</div>
 </dialog>
 
 <style>
 	.confirm-modal {
+		--modal-bg: #141210;
+		--modal-surface: rgba(251, 247, 240, 0.04);
+		--modal-divider: rgba(251, 247, 240, 0.08);
+		--modal-fg: #fbf7f0;
+		--modal-muted: #a8a29e;
+		--modal-border: rgba(251, 247, 240, 0.16);
+		--modal-btn-border: rgba(251, 247, 240, 0.28);
+		--modal-backdrop: rgba(0, 0, 0, 0.76);
+		--modal-focus: rgba(251, 247, 240, 0.9);
+
 		border: none;
-		padding: 0;
+		padding: 16px;
 		background: transparent;
+		margin: auto;
+		max-width: 100vw;
+		max-height: 100dvh;
+		font-family: var(--font-body);
+	}
+
+	.confirm-modal.theme-light {
+		--modal-bg: #ffffff;
+		--modal-surface: #fafafa;
+		--modal-divider: #f1f3f5;
+		--modal-fg: #0f172a;
+		--modal-muted: #64748b;
+		--modal-border: #e5e7eb;
+		--modal-btn-border: #cbd5e1;
+		--modal-backdrop: rgba(15, 23, 42, 0.48);
+		--modal-focus: #0f172a;
 	}
 
 	.confirm-modal::backdrop {
-		background: var(--veil-mid, rgba(11, 10, 9, 0.82));
+		background: var(--modal-backdrop);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
 	}
 
-	.confirm-box {
-		width: min(92vw, 440px);
-		padding: 28px 26px 24px;
-		background: var(--bg);
-		border: 1px solid var(--hairline);
-		border-radius: 18px;
-		color: var(--fg);
-		box-shadow: 0 24px 60px rgba(11, 10, 9, 0.45);
-		text-align: center;
+	.confirm-card {
+		width: min(92vw, 460px);
+		padding: 20px 22px 22px;
+		background: var(--modal-bg);
+		color: var(--modal-fg);
+		border: 1.5px solid var(--modal-border);
+		border-radius: 16px;
+		box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
 	}
 
-	.confirm-icon {
+	.card-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.close-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 56px;
-		height: 56px;
-		margin: 0 auto 16px;
-		border-radius: 50%;
-		background: color-mix(in srgb, var(--fg) 7%, transparent);
-		color: var(--fg);
-	}
-
-	.confirm-title {
-		margin: 0 0 8px;
-		color: var(--fg);
-		font-size: 1.5rem;
-		font-weight: 500;
-		letter-spacing: 0.01em;
-	}
-
-	.confirm-body {
-		margin: 0 auto 14px;
-		max-width: 34ch;
-		font-size: 0.9rem;
-		line-height: 1.6;
-		color: var(--fg-dim);
-		text-wrap: balance;
-	}
-
-	.confirm-note {
-		display: inline-block;
-		margin: 0 0 20px;
-		padding: 5px 12px;
+		width: 36px;
+		height: 36px;
+		border: 1px solid var(--modal-border);
 		border-radius: 999px;
-		border: 1px solid var(--hairline);
-		font-size: 0.56rem;
-		font-weight: 700;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
-		color: var(--fg-dim);
+		background: transparent;
+		color: var(--modal-muted);
+		cursor: pointer;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease,
+			transform 120ms ease;
 	}
 
-	.confirm-actions {
+	.close-btn:hover {
+		color: var(--modal-fg);
+		border-color: var(--modal-fg);
+	}
+
+	.close-btn:active {
+		transform: scale(0.94);
+	}
+
+	.close-btn:focus-visible {
+		outline: 2.5px solid var(--modal-focus);
+		outline-offset: 3px;
+	}
+
+	.head-divider {
+		width: 100%;
+		height: 5px;
+		border-radius: 999px;
+		background: var(--modal-divider);
+	}
+
+	.card-body {
 		display: flex;
-		justify-content: center;
-		gap: 10px;
+		flex-direction: column;
+		gap: 8px;
+		padding: 4px 2px;
+		text-align: left;
 	}
 
-	.confirm-actions form {
+	.eyebrow {
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--modal-muted);
+	}
+
+	.title {
+		margin: 0;
+		font-size: 1.32rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		line-height: 1.2;
+		color: var(--modal-fg);
+	}
+
+	.desc {
+		margin: 0;
+		font-size: 0.88rem;
+		line-height: 1.55;
+		color: var(--modal-muted);
+	}
+
+	.notice-strip {
+		margin-top: 6px;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 11px 14px;
+		border: 1px solid var(--modal-border);
+		border-radius: 12px;
+		background: var(--modal-surface);
+		color: var(--modal-muted);
+		font-size: 0.78rem;
+		font-weight: 600;
+	}
+
+	.notice-strip svg {
+		flex-shrink: 0;
+		color: var(--modal-fg);
+	}
+
+	.card-actions {
+		display: grid;
+		grid-template-columns: 1fr 1.35fr;
+		gap: 10px;
+		padding-top: 4px;
+	}
+
+	.card-actions form {
 		display: contents;
 	}
 
-	/* Target sentuh minimum 44px (kios layar sentuh) */
-	.ghost-btn,
-	.capsule-btn {
+	.btn-outline,
+	.btn-solid {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
+		width: 100%;
 		min-height: 44px;
 		padding: 0 18px;
 		border-radius: 999px;
-		font-size: 0.68rem;
+		font-family: var(--font-body);
+		font-size: 0.78rem;
 		font-weight: 700;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		cursor: pointer;
 		transition:
 			transform 120ms ease,
 			border-color 160ms ease,
-			background-color 200ms ease,
-			color 200ms ease;
+			color 160ms ease,
+			opacity 160ms ease;
 	}
 
-	.ghost-btn {
-		border: 1px solid transparent;
+	.btn-outline {
+		border: 1px solid var(--modal-btn-border);
 		background: transparent;
-		color: var(--fg-dim);
+		color: var(--modal-muted);
 	}
 
-	.ghost-btn:hover {
-		color: var(--fg);
-		border-color: var(--hairline);
+	.btn-outline:hover {
+		color: var(--modal-fg);
+		border-color: var(--modal-fg);
 	}
 
-	/* Kapsul berinversi: isi vs latar saling menukar nilai */
-	.capsule-btn {
+	.btn-solid {
 		border: none;
-		background: var(--fg);
-		color: var(--bg);
+		background: var(--modal-fg);
+		color: var(--modal-bg);
 	}
 
-	.capsule-btn:hover {
-		background: transparent;
-		color: var(--fg);
-		box-shadow: inset 0 0 0 2px var(--fg);
+	.btn-solid:hover {
+		opacity: 0.9;
+		transform: translateY(-1px);
 	}
 
-	.ghost-btn:active,
-	.capsule-btn:active {
-		transform: scale(0.97);
+	.btn-outline:active,
+	.btn-solid:active {
+		transform: scale(0.98);
 	}
 
-	.ghost-btn:focus-visible,
-	.capsule-btn:focus-visible {
-		outline: 2.5px solid var(--focus);
+	.btn-outline:focus-visible,
+	.btn-solid:focus-visible {
+		outline: 2.5px solid var(--modal-focus);
 		outline-offset: 3px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.close-btn,
+		.btn-outline,
+		.btn-solid {
+			transition: none;
+		}
+	}
+
+	@media (max-width: 440px) {
+		.card-actions {
+			grid-template-columns: 1fr;
+		}
+		.btn-solid {
+			order: -1;
+		}
 	}
 </style>

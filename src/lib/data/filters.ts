@@ -13,7 +13,7 @@ export interface PhotoFilter {
 	/** Human-readable label. */
 	name: string;
 	/** Category grouping. */
-	category: FilterCategory;
+	category: FilterCategory | 'Custom' | (string & {});
 	/**
 	 * CSS-compatible filter string for the live preview canvas.
 	 * When set to '' the preview shows no filter.
@@ -24,6 +24,8 @@ export interface PhotoFilter {
 	 * Empty string means "no filter" — passes video through.
 	 */
 	ffmpeg: string;
+	source?: 'builtin' | 'custom';
+	enabled?: boolean;
 }
 
 export const PHOTO_FILTERS: PhotoFilter[] = [
@@ -122,17 +124,31 @@ export const PHOTO_FILTERS: PhotoFilter[] = [
 	}
 ];
 
+/** Custom filters (runtime, dari dashboard). */
+let _customFilters: PhotoFilter[] = [];
+export function setCustomFilters(items: PhotoFilter[]): void {
+	_customFilters = Array.isArray(items) ? items : [];
+}
+export function allPhotoFilters(): PhotoFilter[] {
+	const customs = _customFilters.filter((f) => f.enabled !== false);
+	return [...PHOTO_FILTERS, ...customs];
+}
+export function findPhotoFilter(key: string): PhotoFilter | undefined {
+	return allPhotoFilters().find((f) => f.key === key);
+}
+
 /** Group filters by category for display. */
-export function getFilterGroups(): Record<FilterCategory, PhotoFilter[]> {
-	const groups: Record<FilterCategory, PhotoFilter[]> = {
+export function getFilterGroups(): Record<string, PhotoFilter[]> {
+	const groups: Record<string, PhotoFilter[]> = {
 		Essential: [],
 		Retro: [],
 		Fun: [],
 		Distort: [],
 		'Black & White': []
 	};
-	for (const f of PHOTO_FILTERS) {
-		groups[f.category].push(f);
+	for (const f of allPhotoFilters()) {
+		const cat = f.category || 'Custom';
+		(groups[cat] ??= []).push(f);
 	}
 	return groups;
 }

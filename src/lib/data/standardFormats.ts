@@ -12,7 +12,7 @@
 
 import type { ProductSpec, Products } from '#lib/types';
 
-export type FormatKind = 'print' | 'digital';
+type FormatKind = 'print' | 'digital';
 
 export interface StandardFormat {
 	id: string;
@@ -29,7 +29,7 @@ export interface StandardFormat {
 	defaultCount: number;
 }
 
-export const STANDARD_FORMATS: StandardFormat[] = [
+export const BUILTIN_FORMATS: StandardFormat[] = [
 	{
 		id: '2x6',
 		label: '2×6 · Single Strip',
@@ -60,8 +60,8 @@ export const STANDARD_FORMATS: StandardFormat[] = [
 		pxH: 1800,
 		cm: '10,16 × 15,24 cm (dipotong jadi dua strip)',
 		ratio: 1200 / 1800,
-		photos: [6],
-		defaultCount: 6
+		photos: [4, 6],
+		defaultCount: 4
 	},
 	{
 		id: '4r-landscape',
@@ -153,17 +153,80 @@ export const STANDARD_FORMATS: StandardFormat[] = [
 	}
 ];
 
+/** Back-compat alias. */
+export const STANDARD_FORMATS: StandardFormat[] = BUILTIN_FORMATS;
+
+/** Custom frame sizes (runtime). Built-in IDs are never overridden. */
+let _customFormats: StandardFormat[] = [];
+export function setCustomFormats(formats: StandardFormat[]): void {
+	const builtin = new Set(BUILTIN_FORMATS.map((f) => f.id));
+	_customFormats = (formats || []).filter((f) => f && f.id && !builtin.has(f.id));
+}
+export function allFormats(): StandardFormat[] {
+	return [...BUILTIN_FORMATS, ..._customFormats];
+}
+
 export const DEFAULT_FORMAT_ID = '2x6';
 
 export function formatById(id: string | null | undefined): StandardFormat {
-	return STANDARD_FORMATS.find((f) => f.id === id) ?? STANDARD_FORMATS[0];
+	const all = allFormats();
+	return all.find((f) => f.id === id) ?? BUILTIN_FORMATS[0];
 }
 
 /** Rasio cocok ±1% — sama seperti validasi Frame Studio. */
 export function detectFormat(width: number, height: number): StandardFormat | null {
 	if (width <= 0 || height <= 0) return null;
 	const actual = width / height;
-	return STANDARD_FORMATS.find((f) => Math.abs(actual / f.ratio - 1) <= 0.01) ?? null;
+	return allFormats().find((f) => Math.abs(actual / f.ratio - 1) <= 0.01) ?? null;
+}
+
+/** Generate a default ProductSpec layout for any format + photo count (used for custom sizes). */
+export function generateCustomSpec(format: StandardFormat, count: number): ProductSpec {
+	const W = Math.max(200, Math.round(format.pxW));
+	const H = Math.max(200, Math.round(format.pxH));
+	const landscape = W >= H;
+	const margin = Math.max(16, Math.round(Math.min(W, H) * 0.03));
+	const hairline = Math.max(6, Math.round(Math.min(W, H) * 0.01));
+	const gap = Math.max(8, Math.round(Math.min(W, H) * 0.015));
+	const footer = Math.max(60, Math.round(H * 0.08));
+	const innerW = Math.max(40, W - margin * 2);
+	const innerH = Math.max(40, H - margin * 2 - footer);
+	let rows: ProductSpec['rows'];
+	if (count <= 1) {
+		rows = [{ h: innerH, cells: [{ w: innerW }] }];
+	} else if (landscape) {
+		const cellW = Math.max(20, Math.floor((innerW - gap * (count - 1)) / count));
+		rows = [{ h: innerH, cells: Array.from({ length: count }, () => ({ w: cellW })) }];
+	} else if (count === 2) {
+		const rowH = Math.max(20, Math.floor((innerH - gap) / 2));
+		rows = [
+			{ h: rowH, cells: [{ w: innerW }] },
+			{ h: rowH, cells: [{ w: innerW }] }
+		];
+	} else if (count === 4 && W / H > 0.55) {
+		const rowH = Math.max(20, Math.floor((innerH - gap) / 2));
+		const colW = Math.max(20, Math.floor((innerW - gap) / 2));
+		rows = [
+			{ h: rowH, cells: [{ w: colW }, { w: colW }] },
+			{ h: rowH, cells: [{ w: colW }, { w: colW }] }
+		];
+	} else {
+		const rowH = Math.max(20, Math.floor((innerH - gap * (count - 1)) / count));
+		rows = Array.from({ length: count }, () => ({ h: rowH, cells: [{ w: innerW }] }));
+	}
+	return {
+		nama: format.label.split('·')[0].trim() || format.label,
+		cm: format.cm,
+		pxW: W,
+		pxH: H,
+		margin,
+		hairline,
+		gap,
+		footer,
+		copySheet: 1,
+		sheetOrient: landscape ? 'landscape' : 'portrait',
+		rows
+	};
 }
 
 /** Spec layout slot untuk tiap format & jumlah foto yang diizinkan. */
@@ -265,7 +328,7 @@ export const STANDARD_SPECS: Record<string, Products> = {
 		}
 	},
 	'4r-double': {
-		6: {
+		4: {
 			nama: '4R',
 			cm: '10,16 × 15,24 cm',
 			pxW: 1200,
@@ -277,6 +340,24 @@ export const STANDARD_SPECS: Record<string, Products> = {
 			copySheet: 1,
 			sheetOrient: 'portrait',
 			cutLine: 'vertical',
+			rows: [
+				{ h: 396, cells: [{ w: 568 }, { w: 568 }] },
+				{ h: 396, cells: [{ w: 568 }, { w: 568 }] },
+				{ h: 396, cells: [{ w: 568 }, { w: 568 }] },
+				{ h: 396, cells: [{ w: 568 }, { w: 568 }] }
+			]
+		},
+		6: {
+			nama: '4R',
+			cm: '10,16 × 15,24 cm',
+			pxW: 1200,
+			pxH: 1800,
+			margin: 24,
+			hairline: 12,
+			gap: 16,
+			footer: 120,
+			copySheet: 1,
+			sheetOrient: 'portrait',
 			rows: [
 				{ h: 533, cells: [{ w: 568 }, { w: 568 }] },
 				{ h: 533, cells: [{ w: 568 }, { w: 568 }] },
@@ -354,9 +435,8 @@ export const STANDARD_SPECS: Record<string, Products> = {
 			copySheet: 1,
 			sheetOrient: 'portrait',
 			rows: [
-				{ h: 433, cells: [{ w: 998 }] },
-				{ h: 433, cells: [{ w: 998 }] },
-				{ h: 433, cells: [{ w: 998 }] }
+				{ h: 657, cells: [{ w: 998 }] },
+				{ h: 657, cells: [{ w: 492 }, { w: 492 }] }
 			]
 		}
 	},
@@ -659,9 +739,13 @@ export const STANDARD_SPECS: Record<string, Products> = {
 /** Spec layout untuk format + jumlah foto. */
 export function specFor(formatId: string, count: number): ProductSpec {
 	const spec = STANDARD_SPECS[formatId]?.[count];
-	if (!spec) {
-		const fallback = formatById(formatId);
-		return STANDARD_SPECS[fallback.id][fallback.defaultCount];
+	if (spec) return spec;
+	const fmt = formatById(formatId);
+	// Custom format (or unknown): generate a default layout dynamically.
+	const builtin = new Set(BUILTIN_FORMATS.map((f) => f.id));
+	if (!builtin.has(fmt.id) || !STANDARD_SPECS[fmt.id]) {
+		const c = fmt.photos.includes(count) ? count : fmt.defaultCount;
+		return generateCustomSpec(fmt, c);
 	}
-	return spec;
+	return STANDARD_SPECS[fmt.id][fmt.defaultCount] ?? generateCustomSpec(fmt, fmt.defaultCount);
 }

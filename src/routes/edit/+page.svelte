@@ -12,4 +12,4 @@
 	});
 </script>
 
-<EditScreen />
+<EditScreen mode="edit" />

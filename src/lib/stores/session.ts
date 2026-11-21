@@ -10,36 +10,54 @@ import { goto } from '$app/navigation';
 import { DEFAULT_FORMAT_ID, formatById } from '#lib/data/standardFormats';
 import type {
 	CameraSettings,
-	CustomTemplate,
 	KioskTheme,
 	PhotoFrame,
 	PhotoTransform,
 	Screen,
 	SessionState,
-	StickerLayer
+	StickerLayer,
+	TimelapseMeta,
+	TimelapseSettings
 } from '#lib/types';
 
 /** Theme persistence key: the kios choice survives page reloads via localStorage */
 const THEME_KEY = 'distudio-theme';
 const CAMERA_SETTINGS_KEY = 'distudio-camera-settings';
 
+const DEFAULT_TIMELAPSE_SETTINGS: TimelapseSettings = {
+	auto: true,
+	speedMul: 1,
+	transition: 'none',
+	makeVideo: true
+};
+
 const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
 	theme: 'clean',
 	timer: 3, // PhotoDefaultIntervalCapture = 3 seconds
 	flash: 'off',
 	filter: 'none',
-	grid: 'none'
+	grid: 'none',
+	timelapse: { ...DEFAULT_TIMELAPSE_SETTINGS }
 };
 
+function mergeCameraSettings(saved: Partial<CameraSettings> | null | undefined): CameraSettings {
+	const s = saved || {};
+	return {
+		...DEFAULT_CAMERA_SETTINGS,
+		...s,
+		timelapse: { ...DEFAULT_TIMELAPSE_SETTINGS, ...(s.timelapse || {}) }
+	};
+}
+
 function initialCameraSettings(): CameraSettings {
-	if (typeof window === 'undefined') return { ...DEFAULT_CAMERA_SETTINGS };
+	if (typeof window === 'undefined') return mergeCameraSettings(null);
 	try {
 		const saved = localStorage.getItem(CAMERA_SETTINGS_KEY);
-		if (saved) return { ...DEFAULT_CAMERA_SETTINGS, ...JSON.parse(saved) };
+		if (saved) return mergeCameraSettings(JSON.parse(saved) as Partial<CameraSettings>);
 	} catch {
 		/* proceed with defaults */
 	}
-	return { ...DEFAULT_CAMERA_SETTINGS };
+	return mergeCameraSettings(null);
 }
 
 function initialTheme(): KioskTheme {
@@ -66,12 +84,14 @@ export const session = writable<SessionState>({
 	formatId: DEFAULT_FORMAT_ID,
 	activeFrame: null,
 	selectedPhotoIndices: [],
-	customTemplateData: null,
 	theme: initialTheme(),
 	cameraSettings: initialCameraSettings(),
 	photoTransforms: [],
 	stickers: [],
 	photoFilter: 'none',
+	timelapseDataUrl: null,
+	timelapseVideoDataUrl: null,
+	timelapseMeta: null,
 	flipHorizontal: true // PhotoDefaultFlipHorizontal = 1
 });
 
@@ -107,6 +127,7 @@ const SCREEN_PATH: Record<Screen, string> = {
 	editor: '/editor',
 	edit: '/edit',
 	decorate: '/decorate',
+	timelapse: '/timelapse',
 	print: '/print'
 };
 
@@ -122,10 +143,20 @@ export function setTheme(theme: KioskTheme): void {
 	}
 }
 
-/** Update camera settings (partial merge); persisted to localStorage */
-export function setCameraSettings(partial: Partial<CameraSettings>): void {
+type CameraSettingsPatch = Partial<Omit<CameraSettings, 'timelapse'>> & {
+	timelapse?: Partial<TimelapseSettings>;
+};
+
+/** Update camera settings (partial merge, termasuk timelapse); persisted to localStorage */
+export function setCameraSettings(partial: CameraSettingsPatch): void {
 	session.update((s) => {
-		const cameraSettings = { ...s.cameraSettings, ...partial };
+		const cameraSettings = mergeCameraSettings({
+			...s.cameraSettings,
+			...partial,
+			timelapse: partial.timelapse
+				? { ...s.cameraSettings.timelapse, ...partial.timelapse }
+				: s.cameraSettings.timelapse
+		});
 		if (typeof window !== 'undefined') {
 			try {
 				localStorage.setItem(CAMERA_SETTINGS_KEY, JSON.stringify(cameraSettings));
@@ -260,17 +291,7 @@ export function finishCapture(): void {
 
 /** Pilih preset kertas bawaan; template custom yang aktif ikut dilepas */
 export function selectBuiltinTemplate(key: string): void {
-	session.update((s) => ({ ...s, selectedTemplate: key, customTemplateData: null }));
-}
-
-/** Update caption text */
-export function setCaption(text: string): void {
-	session.update((s) => ({ ...s, caption: text }));
-}
-
-/** Toggle date stamp */
-export function toggleDate(): void {
-	session.update((s) => ({ ...s, showDate: !s.showDate }));
+	session.update((s) => ({ ...s, selectedTemplate: key }));
 }
 
 /** Pilih format standard; jumlah foto menyesuaikan default format. */
@@ -324,37 +345,9 @@ export function setActiveFrame(frame: PhotoFrame | null): void {
 			...s,
 			activeFrame: frame,
 			photoCount: slotCount,
-			customTemplateData: null,
 			selectedPhotoIndices
 		};
 	});
-}
-
-/** Pilih ulang foto otomatis (jarak merata) dari foto yang tersedia. */
-export function autoSelectPhotos(): void {
-	session.update((s) => ({
-		...s,
-		selectedPhotoIndices: evenIndices(s.photos.length, s.photoCount)
-	}));
-}
-
-/** Tambah/lepas satu foto dari pilihan; batas = photoCount. */
-export function toggleSelectedPhoto(index: number): void {
-	session.update((s) => {
-		const current = s.selectedPhotoIndices;
-		if (current.includes(index)) {
-			return { ...s, selectedPhotoIndices: current.filter((i) => i !== index) };
-		}
-		if (current.length >= s.photoCount) return s;
-		return {
-			...s,
-			selectedPhotoIndices: [...current, index].sort((a, b) => a - b)
-		};
-	});
-}
-
-export function clearSelectedPhotos(): void {
-	session.update((s) => ({ ...s, selectedPhotoIndices: [] }));
 }
 
 /** Set per-photo edit transform (rotation / flip / zoom) — edit screen */
@@ -381,6 +374,28 @@ export function moveSticker(id: string, x: number, y: number): void {
 	}));
 }
 
+/** Update sticker layer properties (size/rotation/opacity/pos) — edit screen */
+export function updateSticker(id: string, patch: Partial<StickerLayer>): void {
+	session.update((s) => ({
+		...s,
+		stickers: (s.stickers || []).map((l) => (l.id === id ? { ...l, ...patch } : l))
+	}));
+}
+
+/** Pindahkan layer stiker ke posisi layer lain (drag reorder). */
+export function moveStickerLayer(fromId: string, toId: string): void {
+	if (fromId === toId) return;
+	session.update((s) => {
+		const list = [...(s.stickers || [])];
+		const from = list.findIndex((l) => l.id === fromId);
+		const to = list.findIndex((l) => l.id === toId);
+		if (from < 0 || to < 0) return s;
+		const [moved] = list.splice(from, 1);
+		list.splice(to, 0, moved);
+		return { ...s, stickers: list };
+	});
+}
+
 /** Remove a sticker layer (edit screen) */
 export function removeSticker(id: string): void {
 	session.update((s) => ({ ...s, stickers: (s.stickers || []).filter((l) => l.id !== id) }));
@@ -391,67 +406,18 @@ export function setPhotoFilter(filter: string | null): void {
 	session.update((s) => ({ ...s, photoFilter: filter }));
 }
 
-/** Set active custom template object */
-export function setCustomTemplate(template: CustomTemplate | null): void {
+/** Simpan GIF + video timelapse + metadata (halaman timelapse). */
+export function setTimelapseResult(
+	dataUrl: string | null,
+	videoDataUrl: string | null,
+	meta: TimelapseMeta | null
+): void {
 	session.update((s) => ({
 		...s,
-		selectedTemplate: template ? template.id : 'classic',
-		customTemplateData: template || null
+		timelapseDataUrl: dataUrl,
+		timelapseVideoDataUrl: videoDataUrl,
+		timelapseMeta: meta
 	}));
-}
-
-/** Update photo assignment for a specific slot in the active custom template */
-export function updateSlotAssignment(slotId: string, photoIndex: number | null): void {
-	session.update((s) => {
-		if (!s.customTemplateData || !s.customTemplateData.slots) return s;
-		const slots = s.customTemplateData.slots.map((slot) => {
-			if (slot.id === slotId) {
-				return { ...slot, assignedPhotoIndex: photoIndex };
-			}
-			return slot;
-		});
-		return {
-			...s,
-			customTemplateData: {
-				...s.customTemplateData,
-				slots
-			}
-		};
-	});
-}
-
-export interface SlotTransform {
-	scale?: number;
-	offsetX?: number;
-	offsetY?: number;
-}
-
-/** Update crop scale and pan offsets for a specific slot */
-export function updateSlotTransform(
-	slotId: string,
-	{ scale, offsetX, offsetY }: SlotTransform
-): void {
-	session.update((s) => {
-		if (!s.customTemplateData || !s.customTemplateData.slots) return s;
-		const slots = s.customTemplateData.slots.map((slot) => {
-			if (slot.id === slotId) {
-				return {
-					...slot,
-					scale: scale !== undefined ? scale : slot.scale,
-					offsetX: offsetX !== undefined ? offsetX : slot.offsetX,
-					offsetY: offsetY !== undefined ? offsetY : slot.offsetY
-				};
-			}
-			return slot;
-		});
-		return {
-			...s,
-			customTemplateData: {
-				...s.customTemplateData,
-				slots
-			}
-		};
-	});
 }
 
 /** Full session reset — clears all photos and returns to start (keeps kios theme + camera settings) */
@@ -472,12 +438,14 @@ export function resetSession(): void {
 		formatId: DEFAULT_FORMAT_ID,
 		activeFrame: null,
 		selectedPhotoIndices: [],
-		customTemplateData: null,
 		theme: currentTheme || 'light',
-		cameraSettings: currentCameraSettings || { ...DEFAULT_CAMERA_SETTINGS },
+		cameraSettings: mergeCameraSettings(currentCameraSettings),
 		photoTransforms: [],
 		stickers: [],
 		photoFilter: 'none',
+		timelapseDataUrl: null,
+		timelapseVideoDataUrl: null,
+		timelapseMeta: null,
 		flipHorizontal: true
 	});
 	void goto(SCREEN_PATH.start);

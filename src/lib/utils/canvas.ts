@@ -7,8 +7,7 @@
  * dan komposisi lembar 4R.
  */
 
-import { getCustomTemplate, BUILTIN_STICKERS } from './customTemplateStorage';
-import { specFor, formatById } from '#lib/data/standardFormats';
+import { specFor } from '#lib/data/standardFormats';
 import {
 	isCustomTemplate,
 	type BuiltinTemplate,
@@ -17,7 +16,8 @@ import {
 	type ProductSpec,
 	type RenderOptions,
 	type ResolvedTemplate,
-	type SlotPoint
+	type SlotPoint,
+	type StickerLayer
 } from '#lib/types';
 
 /** Built-in Strip templates — kertas foto-booth klasik: kertas paper,
@@ -195,35 +195,16 @@ export function getProductForCount(count: number, formatId?: string | null): Pro
 /**
  * Resolve a template argument to a concrete template object.
  */
-export async function resolveTemplate(
+function resolveTemplate(
 	templateOrKey: string | CustomTemplate | BuiltinTemplate
-): Promise<ResolvedTemplate> {
+): ResolvedTemplate {
 	if (typeof templateOrKey === 'object' && templateOrKey !== null) {
 		return templateOrKey;
 	}
-	if (TEMPLATES[templateOrKey]) {
-		return TEMPLATES[templateOrKey];
-	}
-	const custom = await getCustomTemplate(templateOrKey);
-	if (custom) return custom;
-	return TEMPLATES.classic;
+	return TEMPLATES[templateOrKey] ?? TEMPLATES.classic;
 }
 
-/**
- * Crop-scale-center: draw an image into a rectangle, center-cropped.
- */
-function drawCroppedImage(
-	ctx: CanvasRenderingContext2D,
-	img: HTMLImageElement,
-	dx: number,
-	dy: number,
-	dw: number,
-	dh: number
-): void {
-	drawCroppedImageWithTransform(ctx, img, dx, dy, dw, dh, 1.0, 0, 0);
-}
-
-export type RenderImage = HTMLImageElement | null;
+type RenderImage = HTMLImageElement | null;
 
 /**
  * Draw an image into a destination rectangle with cover cropping,
@@ -236,7 +217,7 @@ export type RenderImage = HTMLImageElement | null;
  * @param offsetX -1 to 1 relative pan X
  * @param offsetY -1 to 1 relative pan Y
  */
-export function drawCroppedImageWithTransform(
+function drawCroppedImageWithTransform(
 	ctx: CanvasRenderingContext2D,
 	img: HTMLImageElement,
 	dx: number,
@@ -282,7 +263,7 @@ export function drawCroppedImageWithTransform(
 const imageCache = new Map<string, HTMLImageElement>();
 const pendingImages = new Map<string, Promise<HTMLImageElement>>();
 
-export function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string): Promise<HTMLImageElement> {
 	if (!src) {
 		return Promise.reject(new Error('Empty image source'));
 	}
@@ -308,8 +289,37 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 	return p;
 }
 
-/** Helper to draw a rounded rectangle path. */
-export function roundRect(
+/** Draw user-placed sticker layers on top of a rendered strip. */
+async function drawStickerLayers(
+	ctx: CanvasRenderingContext2D,
+	stickers: StickerLayer[],
+	stripX: number,
+	stripY: number,
+	stripW: number,
+	stripH: number,
+	isStale?: () => boolean
+): Promise<void> {
+	for (const st of stickers) {
+		if (isStale?.()) return;
+		if (!st.src) continue;
+		const stickerImg = await loadImage(st.src);
+		if (isStale?.()) return;
+		ctx.save();
+		ctx.globalAlpha = st.opacity ?? 1;
+		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
+		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
+		ctx.scale(st.flipH ? -1 : 1, st.flipV ? -1 : 1);
+		const sw = st.w * stripW;
+		const sh = st.h * stripH;
+		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
+		ctx.restore();
+	}
+}
+
+/**
+ * Helper to draw a rounded rectangle path.
+ */
+function roundRect(
 	ctx: CanvasRenderingContext2D,
 	x: number,
 	y: number,
@@ -419,17 +429,25 @@ async function renderBuiltinStrip(
 	const areaH = footerY - p.margin * ky - areaY;
 	const usedH = p.rows.reduce((a, r) => a + r.h, 0) * ky + (p.rows.length - 1) * p.gap * ky;
 	let cursorY = areaY + (areaH - usedH) / 2;
+	const mirrorDoubleStrip =
+		p.cutLine === 'vertical' &&
+		p.rows.length > 0 &&
+		p.rows.every((r) => r.cells.length === 2) &&
+		count <= p.rows.length;
 	let slotIndex = 0;
 	let selectedRect: { x: number; y: number; w: number; h: number } | null = null;
 	ctx.filter = photoFilter;
-	for (const row of p.rows) {
+	for (let rowIndex = 0; rowIndex < p.rows.length; rowIndex++) {
+		const row = p.rows[rowIndex];
 		const rowH = row.h * ky;
 		const rowW = row.cells.reduce((a, c) => a + c.w, 0) * k + (row.cells.length - 1) * p.gap * k;
 		let cursorX = stripX + (stripW - rowW) / 2;
-		for (const cell of row.cells) {
+		for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex++) {
+			const cell = row.cells[cellIndex];
 			const w = cell.w * k;
-			const img = images[slotIndex];
-			if (slotIndex === options.selectedSlot) {
+			const photoIdx = mirrorDoubleStrip ? rowIndex : slotIndex;
+			const img = images[photoIdx];
+			if (photoIdx === options.selectedSlot && (!mirrorDoubleStrip || cellIndex === 0)) {
 				selectedRect = { x: cursorX, y: cursorY, w, h: rowH };
 			}
 			if (img) {
@@ -437,7 +455,7 @@ async function renderBuiltinStrip(
 				ctx.beginPath();
 				ctx.rect(cursorX, cursorY, w, rowH);
 				ctx.clip();
-				const photoTransform = options.photoTransforms?.[slotIndex] ?? null;
+				const photoTransform = options.photoTransforms?.[photoIdx] ?? null;
 				drawCroppedImageWithTransform(
 					ctx,
 					img,
@@ -466,11 +484,11 @@ async function renderBuiltinStrip(
 					ctx.font = `700 ${Math.round(badgeSize * 0.6)}px 'Inter', sans-serif`;
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
-					ctx.fillText(`${slotIndex + 1}`, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+					ctx.fillText(`${photoIdx + 1}`, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
 				}
 				ctx.restore();
 			} else {
-				drawEmptyBoothSlot(ctx, cursorX, cursorY, w, rowH, t, slotIndex + 1);
+				drawEmptyBoothSlot(ctx, cursorX, cursorY, w, rowH, t, photoIdx + 1);
 			}
 			slotIndex++;
 			cursorX += w + p.gap * k;
@@ -504,19 +522,7 @@ async function renderBuiltinStrip(
 	}
 
 	// Sticker layers placed on the strip (edit screen)
-	for (const st of stickers) {
-		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
-		if (!src) continue;
-		const stickerImg = await loadImage(src);
-		ctx.save();
-		ctx.globalAlpha = st.opacity ?? 1;
-		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
-		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
-		const sw = st.w * stripW;
-		const sh = st.h * stripH;
-		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
-		ctx.restore();
-	}
+	await drawStickerLayers(ctx, stickers, stripX, stripY, stripW, stripH);
 
 	// Footer: serif title + spaced PHOTO BOOTH mark (± tanggal)
 	const title = (caption || '').trim().slice(0, 30) || p.nama;
@@ -727,52 +733,9 @@ async function renderCustomStrip(
 		ctx.drawImage(artworkImg, stripX, stripY, stripW, stripH);
 	}
 
-	// 5.5 Render editable decorative overlay layers (ribbons, banners, stickers, logos)
-	const overlays = (template.overlays || [])
-		.filter((ovl) => !ovl.hidden && ovl.src)
-		.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-
-	for (const ovl of overlays) {
-		if (isStale?.()) return;
-		try {
-			const ovlImg = await loadImage(ovl.src);
-			const ox = stripX + ovl.x * stripW;
-			const oy = stripY + ovl.y * stripH;
-			const ow = ovl.width * stripW;
-			const oh = ovl.height * stripH;
-
-			ctx.save();
-			ctx.globalAlpha = Math.max(0, Math.min(1, ovl.opacity ?? 1.0));
-
-			const cx = ox + ow / 2;
-			const cy = oy + oh / 2;
-			ctx.translate(cx, cy);
-
-			if (ovl.rotation) {
-				ctx.rotate((ovl.rotation * Math.PI) / 180);
-			}
-
-			ctx.drawImage(ovlImg, -ow / 2, -oh / 2, ow, oh);
-			ctx.restore();
-		} catch (err: unknown) {
-			console.warn('Could not load decorative overlay layer image:', ovl.name, err);
-		}
-	}
-
 	// Sticker layers placed on the strip (edit screen) — digambar di atas frame/overlay
-	for (const st of stickers) {
-		const src = st.src ?? BUILTIN_STICKERS.find((s) => s.id === st.stickerId)?.svg;
-		if (!src) continue;
-		const stickerImg = await loadImage(src);
-		ctx.save();
-		ctx.globalAlpha = st.opacity ?? 1;
-		ctx.translate(stripX + st.x * stripW, stripY + st.y * stripH);
-		ctx.rotate(((st.rotation || 0) * Math.PI) / 180);
-		const sw = st.w * stripW;
-		const sh = st.h * stripH;
-		ctx.drawImage(stickerImg, -sw / 2, -sh / 2, sw, sh);
-		ctx.restore();
-	}
+	await drawStickerLayers(ctx, stickers, stripX, stripY, stripW, stripH, isStale);
+	if (isStale?.()) return;
 
 	// 6. Optional caption/date overlay if custom template leaves room and option enabled
 	if (options.caption || options.showDate) {
@@ -807,69 +770,13 @@ async function renderCustomStrip(
 			}
 		}
 	}
-
-	// 7. Visual editing wireframe overlays (when in template editor mode)
-	if (options.showWireframes) {
-		slots.forEach((slot, idx) => {
-			const isSelected = options.selectedSlotId === slot.id;
-			const strokeColor = isSelected ? '#2563EB' : '#10B981';
-
-			ctx.save();
-			ctx.lineWidth = isSelected ? 3 : 1.5;
-			ctx.strokeStyle = strokeColor;
-			ctx.setLineDash(isSelected ? [] : [6, 4]);
-
-			const sx = stripX + slot.x * stripW;
-			const sy = stripY + slot.y * stripH;
-			const sw = slot.width * stripW;
-			const sh = slot.height * stripH;
-
-			if (slot.type === 'polygon' && slot.points) {
-				ctx.beginPath();
-				slot.points.forEach((pt: SlotPoint, pIdx: number) => {
-					const px = stripX + pt.x * stripW;
-					const py = stripY + pt.y * stripH;
-					if (pIdx === 0) ctx.moveTo(px, py);
-					else ctx.lineTo(px, py);
-				});
-				ctx.closePath();
-				ctx.stroke();
-
-				// Draw vertex handles
-				slot.points.forEach((pt: SlotPoint) => {
-					const px = stripX + pt.x * stripW;
-					const py = stripY + pt.y * stripH;
-					ctx.fillStyle = isSelected ? '#2563EB' : '#10B981';
-					ctx.beginPath();
-					ctx.arc(px, py, isSelected ? 6 : 4, 0, Math.PI * 2);
-					ctx.fill();
-				});
-			} else {
-				ctx.strokeRect(sx, sy, sw, sh);
-			}
-
-			// Slot badge tag
-			ctx.setLineDash([]);
-			ctx.fillStyle = strokeColor;
-			const tagText = `${slot.name} (#${idx + 1})`;
-			ctx.font = 'bold 11px Inter, sans-serif';
-			const textWidth = ctx.measureText(tagText).width;
-			ctx.fillRect(sx, sy - 18, textWidth + 10, 18);
-			ctx.fillStyle = '#FFFFFF';
-			ctx.textAlign = 'left';
-			ctx.textBaseline = 'middle';
-			ctx.fillText(tagText, sx + 5, sy - 9);
-
-			ctx.restore();
-		});
-	}
 }
 
 /**
  * Render a single photo strip onto a canvas. count = jumlah foto
  * (menentukan produk & layout built-in).
  */
-export async function renderSingleStrip(
+async function renderSingleStrip(
 	ctx: CanvasRenderingContext2D,
 	images: RenderImage[],
 	template: ResolvedTemplate,

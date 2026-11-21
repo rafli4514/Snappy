@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import { session } from '#lib/stores/session';
 
 	const dispatch = createEventDispatcher<{ retake: number }>();
 
@@ -22,138 +23,150 @@
 		opener = null;
 	}
 
+	function handleBackdropClick(e: MouseEvent): void {
+		if (e.target === dialog) {
+			dialog.close();
+		}
+	}
+
 	function retake(): void {
 		dialog.close();
 		dispatch('retake', index);
 	}
 </script>
 
-<dialog bind:this={dialog} class="zoom-modal" aria-label="Perbesar foto" on:close={handleClose}>
+<dialog
+	bind:this={dialog}
+	class="zoom-modal"
+	class:theme-light={$session.theme === 'light'}
+	aria-label="Perbesar foto"
+	on:close={handleClose}
+	on:click={handleBackdropClick}
+>
 	<div class="zoom-box">
+		<div class="zoom-header">
+			<span class="zoom-label">Foto {index + 1}</span>
+			<form method="dialog">
+				<button type="submit" class="zoom-close" aria-label="Tutup">
+					<svg
+						viewBox="0 0 24 24"
+						width="16"
+						height="16"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						aria-hidden="true"
+					>
+						<path d="M6 6l12 12M18 6L6 18" />
+					</svg>
+				</button>
+			</form>
+		</div>
+
 		{#if url}
-			<img src={url} alt="Perbesar foto terpilih" />
+			<div class="zoom-media">
+				<img src={url} alt="Perbesar foto {index + 1}" />
+			</div>
 		{/if}
-		<form method="dialog">
-			<button type="submit" class="zoom-close" aria-label="Tutup">
+
+		<div class="zoom-footer">
+			<button type="button" class="zoom-retake" on:click={retake}>
 				<svg
 					viewBox="0 0 24 24"
-					width="16"
-					height="16"
+					width="14"
+					height="14"
 					fill="none"
 					stroke="currentColor"
-					stroke-width="2.5"
+					stroke-width="2.2"
 					stroke-linecap="round"
+					stroke-linejoin="round"
 					aria-hidden="true"
 				>
-					<path d="M6 6l12 12M18 6L6 18" />
+					<path d="M1 4v6h6" />
+					<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
 				</svg>
+				Ambil Ulang Foto Ini
 			</button>
-		</form>
-		<button type="button" class="zoom-retake font-mono" on:click={retake}>
-			<svg
-				viewBox="0 0 24 24"
-				width="13"
-				height="13"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2.5"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<path d="M1 4v6h6" />
-				<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
-			</svg>
-			Ambil Ulang Foto Ini
-		</button>
+		</div>
 	</div>
 </dialog>
 
 <style>
 	.zoom-modal {
+		--modal-bg: #141210;
+		--modal-media-bg: #0b0a09;
+		--modal-fg: #fbf7f0;
+		--modal-muted: #a8a29e;
+		--modal-border: rgba(251, 247, 240, 0.16);
+		--modal-btn-border: rgba(251, 247, 240, 0.28);
+		--modal-backdrop: rgba(0, 0, 0, 0.78);
+		--modal-focus: rgba(251, 247, 240, 0.9);
+
 		border: none;
-		padding: 0;
+		padding: 16px;
 		background: transparent;
 		overflow: visible;
 		margin: auto;
 		max-width: 100vw;
 		max-height: 100dvh;
+		font-family: var(--font-body);
+	}
+
+	.zoom-modal.theme-light {
+		--modal-bg: #ffffff;
+		--modal-media-bg: #f8fafc;
+		--modal-fg: #0f172a;
+		--modal-muted: #64748b;
+		--modal-border: #e5e7eb;
+		--modal-btn-border: #cbd5e1;
+		--modal-backdrop: rgba(15, 23, 42, 0.52);
+		--modal-focus: #0f172a;
 	}
 
 	.zoom-modal::backdrop {
-		background: var(--veil-mid, rgba(11, 10, 9, 0.82));
+		background: var(--modal-backdrop);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
 	}
 
 	.zoom-box {
-		position: relative;
-		width: min(96vw, 880px);
-		padding: 10px;
-		background: var(--bg);
-		border: 1px solid var(--hairline);
-		border-radius: 16px;
-		box-shadow: 0 24px 60px rgba(11, 10, 9, 0.45);
+		width: min(92vw, 820px);
+		padding: 14px;
+		background: var(--modal-bg);
+		color: var(--modal-fg);
+		border: 1px solid var(--modal-border);
+		border-radius: 18px;
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 	}
 
-	.zoom-box img {
-		display: block;
-		width: 100%;
-		height: auto;
-		max-height: 78dvh;
-		object-fit: contain;
-		border-radius: 10px;
-		background: var(--veil-edge);
+	.zoom-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 4px;
 	}
 
-	/* Target sentuh minimum 44px (kios layar sentuh) */
+	.zoom-label {
+		font-size: 0.92rem;
+		font-weight: 700;
+		letter-spacing: 0.01em;
+		color: var(--modal-fg);
+	}
+
 	.zoom-close {
-		position: absolute;
-		top: -18px;
-		right: -18px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 44px;
-		height: 44px;
-		border: 1px solid var(--hairline);
-		border-radius: 999px;
-		background: var(--bg);
-		color: var(--fg);
-		cursor: pointer;
-		transition:
-			transform 120ms ease,
-			border-color 160ms ease;
-	}
-
-	.zoom-close:hover {
-		border-color: var(--fg-dim);
-	}
-
-	.zoom-close:active {
-		transform: scale(0.94);
-	}
-
-	.zoom-close:focus-visible {
-		outline: 2.5px solid var(--focus);
-		outline-offset: 3px;
-	}
-
-	.zoom-retake {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 8px;
-		width: 100%;
-		min-height: 44px;
-		margin-top: 10px;
-		padding: 0 16px;
-		border: 1px solid var(--hairline);
+		width: 36px;
+		height: 36px;
+		border: 1px solid var(--modal-border);
 		border-radius: 999px;
 		background: transparent;
-		color: var(--fg-dim);
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.2em;
-		text-transform: uppercase;
+		color: var(--modal-muted);
 		cursor: pointer;
 		transition:
 			color 160ms ease,
@@ -161,27 +174,85 @@
 			transform 120ms ease;
 	}
 
-	.zoom-retake:hover {
-		color: var(--fg);
-		border-color: var(--fg-dim);
+	.zoom-close:hover {
+		color: var(--modal-fg);
+		border-color: var(--modal-fg);
 	}
 
-	.zoom-retake:active {
-		transform: scale(0.97);
+	.zoom-close:active {
+		transform: scale(0.94);
 	}
 
-	.zoom-retake:focus-visible {
-		outline: 2.5px solid var(--focus);
+	.zoom-close:focus-visible {
+		outline: 2.5px solid var(--modal-focus);
 		outline-offset: 3px;
 	}
 
-	@media (max-width: 640px) {
-		.zoom-box {
-			width: min(94vw, 560px);
-		}
-		.zoom-close {
-			top: 8px;
-			right: 8px;
+	.zoom-media {
+		border-radius: 12px;
+		overflow: hidden;
+		background: var(--modal-media-bg);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.zoom-media img {
+		display: block;
+		width: 100%;
+		height: auto;
+		max-height: 70dvh;
+		object-fit: contain;
+	}
+
+	.zoom-footer {
+		display: flex;
+		justify-content: center;
+	}
+
+	.zoom-retake {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		width: 100%;
+		min-height: 44px;
+		padding: 0 20px;
+		border: 1px solid var(--modal-btn-border);
+		border-radius: 999px;
+		background: transparent;
+		color: var(--modal-fg);
+		font-family: var(--font-body);
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		cursor: pointer;
+		transition:
+			background-color 160ms ease,
+			color 160ms ease,
+			border-color 160ms ease,
+			transform 120ms ease;
+	}
+
+	.zoom-retake:hover {
+		background: var(--modal-fg);
+		color: var(--modal-bg);
+		border-color: var(--modal-fg);
+	}
+
+	.zoom-retake:active {
+		transform: scale(0.98);
+	}
+
+	.zoom-retake:focus-visible {
+		outline: 2.5px solid var(--modal-focus);
+		outline-offset: 3px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.zoom-close,
+		.zoom-retake {
+			transition: none;
 		}
 	}
 </style>

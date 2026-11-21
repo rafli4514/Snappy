@@ -17,6 +17,12 @@ export interface StickerAsset {
 	active: boolean;
 	/** Kategori sticker (mis. 'Vintage') untuk tab pemilihan. */
 	category?: string;
+	/** URL langsung (untuk sticker custom yang disajikan via API). */
+	url?: string;
+	/** Sumber aset: bawaan atau custom upload. */
+	source?: 'builtin' | 'custom';
+	/** Toggle aktif untuk custom. */
+	enabled?: boolean;
 }
 
 export const STICKER_ASSETS: StickerAsset[] = [
@@ -151,24 +157,47 @@ export const VINTAGE_STICKER_ASSETS: StickerAsset[] = [
 	}
 ];
 
-/** Kategori sticker yang tersedia untuk dipilih di tab alat. */
-export const STICKER_CATEGORIES: { key: string; label: string }[] = [
-	{ key: 'Vintage', label: 'Vintage' }
-];
+/** Custom stickers (runtime, dari dashboard upload). */
+let _customStickers: StickerAsset[] = [];
+export function setCustomStickers(items: StickerAsset[]): void {
+	_customStickers = Array.isArray(items) ? items : [];
+}
+function allStickerAssets(): StickerAsset[] {
+	return [...STICKER_ASSETS, ...VINTAGE_STICKER_ASSETS, ..._customStickers];
+}
+
+/** Resolve URL/path untuk render sticker (bawaan static atau custom API). */
+export function stickerSrc(s: StickerAsset): string {
+	if (s.url) return s.url;
+	if (s.source === 'custom') return `/api/assets/stickers/${encodeURIComponent(s.file)}`;
+	return `/stickers/${s.category === 'Vintage' ? 'vintage' : 'Pixel'}/${s.file}`;
+}
+
+const BUILTIN_CATEGORIES: { key: string; label: string }[] = [{ key: 'Vintage', label: 'Vintage' }];
+
+/** Kategori sticker yang tersedia (bawaan + custom). */
+export function getStickerCategories(): { key: string; label: string }[] {
+	const cats = [...BUILTIN_CATEGORIES];
+	const seen = new Set(cats.map((c) => c.key));
+	for (const s of _customStickers) {
+		if (s.enabled === false || s.active === false) continue;
+		const key = s.category || 'Custom';
+		if (!seen.has(key)) {
+			seen.add(key);
+			cats.push({ key, label: key === 'Custom' ? 'Custom' : key });
+		}
+	}
+	return cats;
+}
 
 /** Stiker aktif per kategori. */
 export function getStickersByCategory(category: string): StickerAsset[] {
-	return STICKER_ASSETS.concat(VINTAGE_STICKER_ASSETS).filter(
-		(s) => s.active && s.category === category
+	return allStickerAssets().filter(
+		(s) => s.active && s.enabled !== false && (s.category || '') === category
 	);
 }
 
-/** Return only active stickers. */
-export function getActiveStickers() {
-	return STICKER_ASSETS.filter((s) => s.active);
-}
-
-/** Get a sticker by display name. */
-export function findStickerByName(name: string): StickerAsset | undefined {
-	return STICKER_ASSETS.find((s) => s.name === name);
+/** Cari sticker berdasarkan dbId (semua sumber). */
+export function findStickerByDbId(dbId: number): StickerAsset | undefined {
+	return allStickerAssets().find((s) => s.dbId === dbId);
 }

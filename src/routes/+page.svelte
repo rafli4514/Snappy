@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { session } from '#lib/stores/session';
 	import StartScreen from '#lib/page/start/StartScreen.svelte';
 	import GalleryScreen from '#lib/page/gallery/GalleryScreen.svelte';
 	import { onMount } from 'svelte';

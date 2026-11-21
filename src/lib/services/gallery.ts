@@ -34,13 +34,16 @@ function openDB(): Promise<IDBDatabase> {
 	});
 }
 
-export interface SaveGallerySessionInput {
+interface SaveGallerySessionInput {
 	id?: string | null;
 	photos: string[];
 	stripDataUrl: string;
 	templateKey: string;
 	gifDataUrl?: string | null;
+	videoDataUrl?: string | null;
 }
+
+const MAX_GALLERY_VIDEO_BYTES = 12 * 1024 * 1024; // ~9MB binary guard for data URL
 
 /** Save a gallery session and return its ID. */
 export async function saveGallerySession({
@@ -48,16 +51,23 @@ export async function saveGallerySession({
 	photos,
 	stripDataUrl,
 	templateKey,
-	gifDataUrl = null
+	gifDataUrl = null,
+	videoDataUrl = null
 }: SaveGallerySessionInput): Promise<string> {
 	const finalId = id || generateId();
+	let safeVideo: string | null = videoDataUrl || null;
+	if (safeVideo && safeVideo.length > MAX_GALLERY_VIDEO_BYTES * 1.37) {
+		console.warn('Video timelapse terlalu besar untuk galeri, diunggah tanpa video.');
+		safeVideo = null;
+	}
 	const sess: GallerySession = {
 		id: finalId,
 		createdAt: new Date().toISOString(),
 		photos: (photos || []).filter(Boolean),
 		stripDataUrl: stripDataUrl || '',
 		templateKey: typeof templateKey === 'string' ? templateKey : 'custom',
-		gifDataUrl: gifDataUrl || null
+		gifDataUrl: gifDataUrl || null,
+		videoDataUrl: safeVideo
 	};
 
 	// 1. Save to server API
@@ -166,14 +176,6 @@ export async function buildQRCodeDataUrl(galleryUrl: string, size = 300): Promis
 }
 
 /**
- * Backward compatibility alias.
- */
-export function buildQRCodeUrl(galleryUrl: string, size = 256): string {
-	const encoded = encodeURIComponent(galleryUrl);
-	return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encoded}&choe=UTF-8&chld=M|1`;
-}
-
-/**
  * Resolve the scannable gallery URL for a session.
  * Automatically checks for host machine's LAN IP if currently running on localhost,
  * so phones on the same Wi-Fi can scan and open it!
@@ -202,15 +204,9 @@ export async function resolveGalleryUrl(sessionId: string): Promise<string> {
 	return `${window.location.origin}/gallery/${sessionId}`;
 }
 
-/** Simple sync builder using origin */
-export function buildGalleryUrl(sessionId: string): string {
-	if (typeof window === 'undefined') return '';
-	return `${window.location.origin}/gallery/${sessionId}`;
-}
-
 // ─── Animated GIF creation (using gifenc) ───────────────────────────────────
 
-export interface AnimatedGifOptions {
+interface AnimatedGifOptions {
 	width?: number;
 	height?: number;
 	delayMs?: number;

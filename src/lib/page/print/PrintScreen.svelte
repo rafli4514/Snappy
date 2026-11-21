@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { session, goTo, resetSession, stripPhotos } from '#lib/stores/session';
 	import { getProductForCount, renderExportCanvas } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
@@ -11,25 +11,27 @@
 		resolveGalleryUrl,
 		generateId
 	} from '#lib/services/gallery';
-	import PrinterIllus from '#lib/features/print/PrinterIllus.svelte';
 
 	let previewCanvas: HTMLCanvasElement;
+
 	let isPrinting = false;
 	let isDownloading = false;
-	let downloadSuccess = false;
-	let printError: string | null = null;
+	let downloadDone = false;
+	let actionError: string | null = null;
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// QR Gallery state
 	let qrImageUrl: string | null = null;
 	let galleryUrl: string | null = null;
 	let galleryReady = false;
 	let galleryError: string | null = null;
 	let copiedUrl = false;
-	let showPrinterInfo = false;
 
+	/** Ukuran px hasil render, diambil dari kanvas ekspor (bukan angka hafalan). */
+	let sheetPx = { w: 0, h: 0 };
+
+	$: theme = $session.theme;
 	$: photos = $stripPhotos;
 	$: templateKey = $session.selectedTemplate;
-	$: customTemplateData = $session.customTemplateData;
 	$: activeFrame = $session.activeFrame;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
@@ -37,36 +39,34 @@
 	$: stickers = $session.stickers;
 	$: photoFilter = $session.photoFilter;
 
-	$: activeTemplate = activeFrame
-		? frameToTemplate(activeFrame)
-		: customTemplateData || templateKey;
+	$: activeTemplate = activeFrame ? frameToTemplate(activeFrame) : templateKey;
 	$: printFormat = formatById($session.formatId);
 	$: isDigital = printFormat.kind === 'digital';
 
-	// Produk aktif = ukuran cetak nyata per jumlah foto
 	$: produk = getProductForCount($session.photoCount, $session.formatId);
 	$: sheetLandscape = produk.sheetOrient === 'landscape';
-	// Salinan bisa dipilih tamu untuk produk Two up; produk lain tetap 1.
+	$: sizeLabel = produk.cm.includes('cm') ? produk.cm : `${produk.cm} cm`;
+
+	// Two up adalah satu-satunya produk dua salinan; sisanya tetap 1.
 	let copiesChoice: number | null = null;
 	$: copies = Math.min(copiesChoice ?? produk.copySheet, produk.copySheet);
 
-	async function setCopies(n: number): Promise<void> {
-		if (n === copies) return;
-		copiesChoice = n;
-		await tick();
-		await drawSheetPreview();
-	}
+	$: videoUrl = $session.timelapseVideoDataUrl;
+	$: gifUrl = $session.timelapseDataUrl;
 
 	onMount(async () => {
-		// Generate QR instantly without waiting for sheet canvas render
-		generateGalleryQR();
+		void generateGalleryQR();
 		await drawSheetPreview();
+	});
+
+	onDestroy(() => {
+		if (copyTimer) clearTimeout(copyTimer);
 	});
 
 	async function drawSheetPreview(): Promise<void> {
 		if (!previewCanvas) return;
 		try {
-			const fullCanvas = await renderExportCanvas(photos, activeTemplate, {
+			const full = await renderExportCanvas(photos, activeTemplate, {
 				caption,
 				showDate,
 				copies,
@@ -75,35 +75,44 @@
 				stickers,
 				photoFilter
 			});
-			previewCanvas.width = fullCanvas.width > fullCanvas.height ? 600 : 400;
-			previewCanvas.height = fullCanvas.width > fullCanvas.height ? 400 : 600;
+			sheetPx = { w: full.width, h: full.height };
+			// Jaga rasio asli: menarik kanvas ke 400 × 600 membuat strip gepeng.
+			// Bitmap 1200 px supaya tetap tajam saat kotak kertas membesar.
+			const scale = Math.min(1200 / full.width, 1200 / full.height);
+			previewCanvas.width = Math.max(1, Math.round(full.width * scale));
+			previewCanvas.height = Math.max(1, Math.round(full.height * scale));
 			const ctx = previewCanvas.getContext('2d');
 			if (!ctx) return;
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
 			ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-			ctx.drawImage(fullCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+			ctx.drawImage(full, 0, 0, previewCanvas.width, previewCanvas.height);
 		} catch (e) {
-			console.error('Failed to render sheet preview:', e);
+			console.error('Render pratinjau strip gagal:', e);
+			actionError = 'Pratinjau strip gagal dibuat. Coba muat ulang halaman.';
 		}
+	}
+
+	async function setCopies(n: number): Promise<void> {
+		if (n === copies) return;
+		copiesChoice = n;
+		await tick();
+		await drawSheetPreview();
 	}
 
 	async function generateGalleryQR(): Promise<void> {
 		try {
-			// 1. Generate unique session ID immediately
 			const sessionId = generateId();
-
-			// 2. Resolve URL and generate QR code INSTANTLY
 			galleryUrl = await resolveGalleryUrl(sessionId);
 			qrImageUrl = await buildQRCodeDataUrl(galleryUrl, 360);
 			galleryReady = true;
 
-			// 3. Concurrently save session data to server & IndexedDB in the background
-			(async () => {
+			// Simpan sesi di latar belakang: QR sudah tampil lebih dulu.
+			void (async () => {
 				try {
 					let stripDataUrl = '';
 					try {
-						const exportCanvas = await renderExportCanvas(photos, activeTemplate, {
+						const full = await renderExportCanvas(photos, activeTemplate, {
 							caption,
 							showDate,
 							copies,
@@ -112,9 +121,9 @@
 							stickers,
 							photoFilter
 						});
-						stripDataUrl = exportCanvas.toDataURL('image/png');
+						stripDataUrl = full.toDataURL('image/png');
 					} catch (ce) {
-						console.warn('Canvas export warning:', ce);
+						console.warn('Ekspor strip untuk galeri gagal:', ce);
 					}
 
 					await saveGallerySession({
@@ -122,34 +131,37 @@
 						photos: (photos || []).filter(Boolean),
 						stripDataUrl,
 						templateKey: typeof activeTemplate === 'string' ? activeTemplate : 'custom',
-						gifDataUrl: null
+						gifDataUrl: gifUrl ?? null,
+						videoDataUrl: videoUrl ?? null
 					});
 				} catch (saveErr) {
-					console.warn('Background session save warning:', saveErr);
+					console.warn('Simpan sesi galeri gagal:', saveErr);
 				}
 			})();
 		} catch (e) {
-			console.error('Gallery QR generation failed:', e);
-			galleryError = 'Gagal membuat QR code. Anda tetap bisa mengunduh PNG.';
+			console.error('QR galeri gagal dibuat:', e);
+			galleryError =
+				'QR gagal dibuat. Strip tetap bisa dicetak atau diunduh lewat tombol di samping.';
 		}
 	}
 
 	async function handlePrint(): Promise<void> {
 		if (isPrinting) return;
 		isPrinting = true;
-		printError = null;
+		actionError = null;
 		try {
 			await printStrip(photos, activeTemplate, {
 				caption,
 				showDate,
 				copies,
+				formatId: $session.formatId,
 				photoTransforms,
 				stickers,
 				photoFilter
 			});
 		} catch (err) {
-			console.error('Print error:', err);
-			printError = 'Unable to open print dialog. Try downloading the PNG instead.';
+			console.error('Cetak gagal:', err);
+			actionError = 'Dialog cetak gagal dibuka. Unduh PNG lalu cetak dari galeri perangkat.';
 		} finally {
 			isPrinting = false;
 		}
@@ -158,23 +170,23 @@
 	async function handleDownload(): Promise<void> {
 		if (isDownloading) return;
 		isDownloading = true;
-		printError = null;
+		actionError = null;
 		try {
 			await downloadStripPNG(photos, activeTemplate, {
 				caption,
 				showDate,
 				copies,
+				formatId: $session.formatId,
 				photoTransforms,
 				stickers,
 				photoFilter
 			});
-			downloadSuccess = true;
-			setTimeout(() => {
-				downloadSuccess = false;
-			}, 4000);
+			downloadDone = true;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => (downloadDone = false), 4000);
 		} catch (err) {
-			console.error('Download error:', err);
-			printError = 'Failed to generate download. Please try again.';
+			console.error('Unduh PNG gagal:', err);
+			actionError = 'PNG gagal dibuat. Coba lagi, atau pakai QR untuk membuka galeri.';
 		} finally {
 			isDownloading = false;
 		}
@@ -190,24 +202,26 @@
 			.writeText(galleryUrl)
 			.then(() => {
 				copiedUrl = true;
-				setTimeout(() => {
-					copiedUrl = false;
-				}, 2500);
+				if (copyTimer) clearTimeout(copyTimer);
+				copyTimer = setTimeout(() => (copiedUrl = false), 2500);
 			})
-			.catch(() => {});
+			.catch(() => {
+				actionError = 'Link tidak bisa disalin otomatis. Buka galeri lalu salin dari bilah alamat.';
+			});
 	}
 </script>
 
-<svelte:head>
-	{@html `<style id="print-page-size">@page { size: ${printFormat.pxW / 300}in ${printFormat.pxH / 300}in; }</style>`}
-</svelte:head>
-
-<section class="print-screen screen-enter">
-	<header class="print-header">
+<section
+	class="print-screen screen-enter kiosk-scope"
+	class:theme-light={theme === 'light'}
+	aria-label="Cetak dan bagikan"
+>
+	<header class="print-head">
 		<button
-			class="btn btn-ghost btn-sm"
-			on:click={() => goTo('editor')}
-			aria-label="Back to photo strip editor"
+			type="button"
+			class="icon-btn"
+			on:click={() => goTo('timelapse')}
+			aria-label="Kembali ke timelapse"
 		>
 			<svg
 				width="16"
@@ -217,928 +231,779 @@
 				stroke="currentColor"
 				stroke-width="2.5"
 				stroke-linecap="round"
-				aria-hidden="true"
-			>
-				<polyline points="15 18 9 12 15 6" />
-			</svg>
-			Editor
-		</button>
-		<h1 class="print-header-title">Print &amp; Export</h1>
-		<button
-			id="btn-header-new-session"
-			class="header-new-btn btn btn-ghost btn-sm"
-			on:click={handleNewSession}
-			aria-label="Start a new session"
-		>
-			<svg
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
 				stroke-linejoin="round"
 				aria-hidden="true"
 			>
-				<polyline points="1 4 1 10 7 10" />
-				<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+				<path d="M15 18l-6-6 6-6" />
 			</svg>
-			<span>New Session</span>
 		</button>
+		<div class="head-title">
+			<h1 class="font-display">Cetak &amp; Bagikan</h1>
+			<p class="head-sub font-mono">{printFormat.label}</p>
+		</div>
 	</header>
 
 	<div class="print-body">
-		<!-- Left Column: 4R Sheet Preview -->
-		<div class="sheet-preview-col">
-			<div class="sheet-card">
-				<div class="sheet-badge">
-					4R · {produk.cm} cm · {copies === 2 ? '2 salinan' : '1 salinan'}
-				</div>
-				<div class="canvas-wrapper" style="aspect-ratio: {sheetLandscape ? '3 / 2' : '2 / 3'};">
-					<canvas
-						bind:this={previewCanvas}
-						width={sheetLandscape ? 600 : 400}
-						height={sheetLandscape ? 400 : 600}
-						class="sheet-canvas"
-						aria-label="4R printable sheet preview"
-					></canvas>
-				</div>
-				<p class="sheet-caption">
-					{copies === 2 ? '2 salinan — potong di garis tengah' : '1 salinan utuh di lembar 4R'}
-				</p>
-			</div>
-		</div>
-
-		<!-- Right Column: QR -> Actions (Print & Download) -> Info modal -->
-		<div class="print-details-col">
-			{#if printError}
-				<div class="alert alert-error" role="alert">
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="8" x2="12" y2="12" />
-						<line x1="12" y1="16" x2="12.01" y2="16" />
-					</svg>
-					<span>{printError}</span>
-				</div>
-			{/if}
-
-			{#if downloadSuccess}
-				<div class="alert alert-success" role="status">
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<polyline points="20 6 9 17 4 12" />
-					</svg>
-					<span>Photo strip berhasil diunduh!</span>
-				</div>
-			{/if}
-
-			<!-- 1. QR Section: Title above QR, clean white box directly on surface (NO purple card) -->
-			<div class="qr-clean-container">
-				<div class="qr-title-row">
-					<h2 class="qr-clean-title">Scan untuk download gambar</h2>
-					<span class="qr-clean-hint">Arahkan kamera HP ke QR</span>
-				</div>
-
-				{#if galleryReady && qrImageUrl && galleryUrl}
-					<div class="qr-box">
-						<img src={qrImageUrl} alt="QR Code untuk mengunduh foto" class="qr-code-img" />
-					</div>
-
-					<div class="qr-url-pill">
-						<span class="qr-url-short" title={galleryUrl}>{galleryUrl}</span>
-						<button
-							class="url-action-btn"
-							on:click={copyGalleryUrl}
-							aria-label="Copy link"
-							title="Salin link"
-						>
-							{#if copiedUrl}
-								<span class="copied-tag">✓ Tersalin</span>
-							{:else}
-								<svg
-									width="13"
-									height="13"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-									<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-								</svg>
-							{/if}
-						</button>
-						<a
-							href={galleryUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="url-action-btn"
-							title="Buka galeri di tab baru"
-							aria-label="Open gallery in new tab"
-						>
-							<svg
-								width="13"
-								height="13"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-								<polyline points="15 3 21 3 21 9" />
-								<line x1="10" y1="14" x2="21" y2="3" />
-							</svg>
-						</a>
-					</div>
-				{:else if galleryError}
-					<p class="qr-err-text">{galleryError}</p>
-				{:else}
-					<div class="qr-loading-box">
-						<div class="btn-spinner" aria-hidden="true"></div>
-						<span>Membuat QR code…</span>
-					</div>
-				{/if}
+		<!-- Kiri: hasil strip siap cetak -->
+		<section class="panel panel-sheet" aria-labelledby="sheet-title">
+			<div class="panel-head">
+				<h2 id="sheet-title" class="panel-title font-mono">Hasil strip</h2>
+				<span class="panel-meta font-mono">{copies === 2 ? '2 salinan' : '1 salinan'}</span>
 			</div>
 
-			<!-- 2. Action Buttons Below QR: Cetak + Info icon (i) + Download PNG -->
+			<div class="sheet-well">
+				<canvas
+					bind:this={previewCanvas}
+					width={sheetLandscape ? 600 : 400}
+					height={sheetLandscape ? 400 : 600}
+					class="sheet-canvas"
+					aria-label="Pratinjau lembar cetak"
+				></canvas>
+			</div>
+
+			<p class="sheet-size font-mono">{produk.nama} · {sizeLabel}</p>
+
 			{#if produk.copySheet > 1}
-				<div class="copies-choice" role="group" aria-label="Jumlah salinan cetak">
-					<span class="copies-label font-mono">JUMLAH SALINAN</span>
+				<div class="copies" role="group" aria-label="Jumlah salinan cetak">
+					<span class="copies-label font-mono">Salinan</span>
 					<div class="copies-buttons">
 						<button
 							type="button"
 							class="copies-btn font-mono"
 							class:is-active={copies === 1}
 							on:click={() => setCopies(1)}
-							aria-pressed={copies === 1}
+							aria-pressed={copies === 1}>1 salinan</button
 						>
-							1 SALINAN
-						</button>
 						<button
 							type="button"
 							class="copies-btn font-mono"
 							class:is-active={copies === 2}
 							on:click={() => setCopies(2)}
-							aria-pressed={copies === 2}
+							aria-pressed={copies === 2}>2 salinan</button
 						>
-							2 SALINAN
-						</button>
 					</div>
 				</div>
 			{/if}
-			<div class="print-actions-wrapper">
-				{#if !isDigital}
-					<div class="print-btn-with-info">
-						<button
-							id="btn-print"
-							class="btn-print-main btn btn-primary"
-							on:click={handlePrint}
-							disabled={isPrinting}
-							aria-label="Print photo strip"
-						>
-							{#if isPrinting}
-								<div class="btn-spinner" aria-hidden="true"></div>
-								<span>Menyiapkan Cetak…</span>
-							{:else}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<polyline points="6 9 6 2 18 2 18 9" />
-									<path
-										d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
-									/>
-									<rect x="6" y="14" width="12" height="8" />
-								</svg>
-								<span>Cetak {printFormat.label}</span>
-							{/if}
-						</button>
 
-						<!-- Printer Setup Info Icon (i) -->
-						<button
-							type="button"
-							class="printer-info-icon-btn"
-							on:click={() => {
-								showPrinterInfo = !showPrinterInfo;
-							}}
-							title="Printer Setup Checklist"
-							aria-label="Printer setup information"
-							aria-expanded={showPrinterInfo}
-						>
-							<svg
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								aria-hidden="true"
-							>
-								<circle cx="12" cy="12" r="10" />
-								<line x1="12" y1="16" x2="12" y2="12" />
-								<line x1="12" y1="8" x2="12.01" y2="8" />
-							</svg>
-						</button>
+			<p class="panel-hint">
+				{copies === 2
+					? 'Dua salinan di satu lembar. Potong mengikuti garis putus-putus di tengah.'
+					: 'Satu salinan utuh di tengah lembar.'}
+			</p>
+		</section>
+
+		<!-- Tengah atas: foto yang dipakai sesi -->
+		<section class="panel panel-photos" aria-labelledby="photos-title">
+			<div class="panel-head">
+				<h2 id="photos-title" class="panel-title font-mono">Foto sesi</h2>
+				<span class="panel-meta font-mono">{photos.length} foto</span>
+			</div>
+
+			{#if photos.length}
+				<ul class="photo-grid">
+					{#each photos as photo, i (i)}
+						<li class="photo-cell">
+							<img src={photo} alt="Foto {i + 1} pada strip" />
+							<span class="photo-index font-mono" aria-hidden="true">{i + 1}</span>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="empty-note">Belum ada foto di sesi ini.</p>
+			{/if}
+		</section>
+
+		<!-- Tengah bawah: timelapse -->
+		<section class="panel panel-video" aria-labelledby="video-title">
+			<div class="panel-head">
+				<h2 id="video-title" class="panel-title font-mono">Timelapse</h2>
+				<span class="panel-meta font-mono">{videoUrl ? 'MP4' : gifUrl ? 'GIF' : 'belum ada'}</span>
+			</div>
+
+			{#if videoUrl}
+				<div class="video-frame">
+					<!-- svelte-ignore a11y_media_has_caption -->
+					<video
+						src={videoUrl}
+						controls
+						loop
+						muted
+						playsinline
+						autoplay
+						aria-label="Video timelapse sesi"
+					></video>
+				</div>
+			{:else if gifUrl}
+				<div class="video-frame">
+					<img src={gifUrl} alt="GIF timelapse sesi" />
+				</div>
+				<p class="panel-hint">
+					Video MP4 tidak tersedia di browser ini. GIF tetap ikut terkirim ke galeri.
+				</p>
+			{:else}
+				<div class="empty-box">
+					<p>Timelapse belum dibuat untuk sesi ini.</p>
+					<button type="button" class="ghost-btn font-mono" on:click={() => goTo('timelapse')}>
+						Buka halaman timelapse
+					</button>
+				</div>
+			{/if}
+		</section>
+
+		<!-- Kanan: QR galeri lalu aksi cetak -->
+		<aside class="rail" aria-label="Bagikan dan cetak">
+			<section class="panel panel-qr" aria-labelledby="qr-title">
+				<h2 id="qr-title" class="panel-title font-mono">Buka di HP</h2>
+
+				{#if galleryReady && qrImageUrl && galleryUrl}
+					<div class="qr-box">
+						<img src={qrImageUrl} alt="QR code galeri foto sesi" />
 					</div>
+					<p class="qr-hint">Pindai QR untuk membuka strip, GIF, dan video di ponsel.</p>
+					<div class="qr-link">
+						<span class="qr-url font-mono" title={galleryUrl}>{galleryUrl}</span>
+						<button type="button" class="qr-btn font-mono" on:click={copyGalleryUrl}>
+							{copiedUrl ? 'Tersalin' : 'Salin'}
+						</button>
+						<a class="qr-btn font-mono" href={galleryUrl} target="_blank" rel="noopener noreferrer"
+							>Buka</a
+						>
+					</div>
+				{:else if galleryError}
+					<p class="error-note" role="alert">{galleryError}</p>
+				{:else}
+					<div class="qr-box qr-loading" role="status">
+						<span class="spinner" aria-hidden="true"></span>
+						<span class="font-mono">Menyiapkan QR…</span>
+					</div>
+				{/if}
+			</section>
+
+			<section class="panel panel-actions" aria-labelledby="actions-title">
+				<h2 id="actions-title" class="panel-title font-mono">Cetak &amp; unduh</h2>
+
+				{#if actionError}
+					<p class="error-note" role="alert">{actionError}</p>
+				{/if}
+				{#if downloadDone}
+					<p class="ok-note" role="status">Strip PNG tersimpan.</p>
+				{/if}
+
+				{#if !isDigital}
+					<button
+						type="button"
+						id="btn-print"
+						class="capsule-cta font-mono"
+						on:click={handlePrint}
+						disabled={isPrinting}
+					>
+						{#if isPrinting}
+							<span class="spinner" aria-hidden="true"></span>
+							Menyiapkan cetak…
+						{:else}
+							Cetak foto
+						{/if}
+					</button>
+				{:else}
+					<p class="panel-hint">Format ini hanya digital, jadi tidak ada lembar cetak.</p>
 				{/if}
 
 				<button
+					type="button"
 					id="btn-download-png"
-					class="btn-download-main btn btn-secondary"
+					class="ghost-btn font-mono"
 					on:click={handleDownload}
 					disabled={isDownloading}
-					aria-label="Download high-resolution PNG"
 				>
-					{#if isDownloading}
-						<div class="btn-spinner" aria-hidden="true"></div>
-						<span>Membuat PNG…</span>
-					{:else}
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						<span>Download PNG ({sheetLandscape ? '1800 × 1200' : '1200 × 1800'})</span>
-					{/if}
+					{isDownloading ? 'Menyiapkan PNG…' : 'Unduh PNG'}
 				</button>
-			</div>
 
-			<!-- Compact New Session Button -->
-			<div class="bottom-reset-wrap">
-				<button
-					id="btn-new-session"
-					class="inline-icon-btn btn btn-ghost btn-sm"
-					on:click={handleNewSession}
-					aria-label="Start over with a fresh session"
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<polyline points="1 4 1 10 7 10" />
-						<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-					</svg>
-					<span>Sesi Baru (Retake / Mulai Ulang)</span>
+				<button type="button" class="ghost-btn font-mono" on:click={handleNewSession}>
+					Sesi Baru
 				</button>
-			</div>
-		</div>
+
+				{#if sheetPx.w > 0}
+					<p class="panel-hint font-mono">{sheetPx.w} × {sheetPx.h} px · 300 DPI</p>
+				{/if}
+			</section>
+		</aside>
 	</div>
-
-	<!-- Printer Setup Modal / Popover -->
-	{#if showPrinterInfo}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="printer-modal-backdrop"
-			on:click={() => {
-				showPrinterInfo = false;
-			}}
-			role="dialog"
-			aria-modal="true"
-			tabindex="-1"
-		>
-			<div class="printer-modal-card" on:click|stopPropagation>
-				<div class="printer-modal-header">
-					<div class="printer-modal-title-group">
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="var(--color-accent)"
-							stroke-width="2.2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="12" cy="12" r="10" />
-							<line x1="12" y1="16" x2="12" y2="12" />
-							<line x1="12" y1="8" x2="12.01" y2="8" />
-						</svg>
-						<h3>Printer Setup Checklist</h3>
-					</div>
-					<button
-						class="modal-close-btn"
-						on:click={() => {
-							showPrinterInfo = false;
-						}}
-						aria-label="Close printer setup">✕</button
-					>
-				</div>
-
-				<ul class="printer-checklist">
-					<li><strong>Ukuran Kertas:</strong> 4 × 6 inches (4R / Photo Paper)</li>
-					<li>
-						<strong>Orientasi:</strong>
-						{sheetLandscape ? 'Landscape (Menyamping)' : 'Portrait (Tegak)'}
-					</li>
-					<li><strong>Skala (Scale):</strong> 100% (Jangan pilih "Fit to Page")</li>
-					<li><strong>Margin:</strong> None / Borderless</li>
-					<li><strong>Background Graphics:</strong> Centang / ON</li>
-				</ul>
-
-				<div class="cutting-hint-modal">
-					✂️ <strong>Setelah cetak:</strong>
-					{copies === 2
-						? 'Potong sepanjang garis putus-putus tengah untuk membagi menjadi 2 salinan Two up ukuran 15 × 5 cm.'
-						: `Tidak perlu memotong — salinan tunggal ${produk.nama} ukuran ${produk.cm} cm sudah utuh di tengah lembar.`}
-				</div>
-			</div>
-		</div>
-	{/if}
 </section>
 
 <style>
 	.print-screen {
-		min-height: 100dvh;
-		min-height: 100vh;
+		--paper: #e7e2d9;
+		height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg);
 		overflow: hidden;
+		background: var(--bg);
+		color: var(--fg);
+		user-select: none;
+		transition:
+			background-color 220ms ease,
+			color 220ms ease;
 	}
 
-	.print-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 20px;
-		border-bottom: 1.5px solid var(--color-border);
-		background: var(--color-surface);
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		flex-shrink: 0;
-	}
-
-	.print-header-title {
-		font-family: var(--font-display);
-		font-size: var(--text-lg);
-		font-weight: 700;
-		color: var(--color-ink);
-	}
-
-	.header-new-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-	}
-
-	.print-body {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		padding: var(--space-4) var(--space-5);
-		max-width: 960px;
-		margin: 0 auto;
-		width: 100%;
-		align-items: center;
-		justify-content: center;
-	}
-
-	@media (min-width: 768px) {
-		.print-body {
-			flex-direction: row;
-			align-items: center;
-			justify-content: center;
-			gap: 36px;
-			padding: var(--space-4) var(--space-6);
+	/* Layar sempit: biarkan mengalir, tinggi panel mengikuti isi. */
+	@media (max-width: 759px) {
+		.print-screen {
+			height: auto;
+			min-height: 100dvh;
+			overflow: visible;
 		}
 	}
 
-	/* Sheet Preview Column */
-	.sheet-preview-col {
+	/* ── Header ─────────────────────────────────────────────── */
+	.print-head {
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		flex: 0 0 auto;
-	}
-
-	.sheet-card {
-		background: var(--color-surface);
-		border: 1.5px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: var(--space-3);
-		box-shadow: var(--shadow-md);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--space-2);
-		width: 260px;
-	}
-
-	@media (min-width: 768px) {
-		.sheet-card {
-			width: 280px;
-		}
-	}
-
-	.sheet-badge {
-		font-size: 10px;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--color-ink-light);
-		background: var(--color-bg);
-		padding: 2px 10px;
-		border-radius: var(--radius-full);
-		border: 1px solid var(--color-border);
-	}
-
-	.canvas-wrapper {
-		width: 100%;
-		aspect-ratio: 2 / 3;
-		max-height: min(420px, 58vh);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: #e7e2d9;
-		border-radius: var(--radius-md);
-		overflow: hidden;
-		box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
-	}
-
-	.sheet-canvas {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		display: block;
-	}
-
-	.sheet-caption {
-		font-size: 11px;
-		color: var(--color-muted);
-		text-align: center;
-		margin: 0;
-	}
-
-	/* Print Details Column */
-	.print-details-col {
-		display: flex;
-		flex-direction: column;
 		align-items: center;
 		gap: 10px;
-		width: 260px;
-		max-width: 100%;
+		min-height: 60px;
+		padding: 6px 16px;
+		border-bottom: 1px solid var(--ring-line);
+		background: var(--bg);
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		flex-shrink: 0;
+	}
+	.head-title {
+		flex: 1;
+		min-width: 0;
+	}
+	.head-title h1 {
+		margin: 0;
+		font-size: 1.1rem;
+		font-weight: 500;
+		letter-spacing: 0.01em;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.head-sub {
+		margin: 2px 0 0;
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		padding: 0;
+		border: none;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--fg-dim);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.icon-btn:hover {
+		color: var(--fg);
+		background: var(--ring-line);
+	}
+
+	/* ── Grid: 1 kolom, 2 kolom, lalu 3 kolom ───────────────── */
+	.print-body {
+		flex: 1;
+		min-height: 0;
+		width: 100%;
+		max-width: 1600px;
+		margin: 0 auto;
+		box-sizing: border-box;
+		padding: 14px;
+		display: grid;
+		gap: 12px;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			'sheet'
+			'photos'
+			'video'
+			'rail';
+		align-content: start;
+	}
+	.panel-sheet {
+		grid-area: sheet;
+	}
+	.panel-photos {
+		grid-area: photos;
+	}
+	.panel-video {
+		grid-area: video;
+	}
+	.rail {
+		grid-area: rail;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 		min-width: 0;
 	}
 
-	@media (min-width: 768px) {
-		.print-details-col {
-			width: 280px;
-		}
-	}
-
-	/* Alerts */
-	.alert {
+	/* ── Panel bersama ──────────────────────────────────────── */
+	.panel {
 		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		padding: 6px 12px;
-		border-radius: var(--radius-md);
-		font-size: var(--text-xs);
-		font-weight: 500;
-		width: 100%;
+		flex-direction: column;
+		gap: 10px;
+		min-width: 0;
 		box-sizing: border-box;
+		padding: 12px;
+		border: 1px solid var(--hairline);
+		border-radius: 12px;
+		background: var(--bg);
 	}
-
-	.alert-error {
-		background: #fef2f2;
-		color: #b91c1c;
-		border: 1px solid #fecaca;
-	}
-
-	.alert-success {
-		background: #ecfdf5;
-		color: #047857;
-		border: 1px solid #a7f3d0;
-	}
-
-	/* ── 1. Clean QR Container (NO outer card wrapper, only QR box has outline) ── */
-	.qr-clean-container {
-		width: 100%;
+	.panel-head {
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 8px;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 10px;
 	}
-
-	.qr-title-row {
-		width: 100%;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
-		text-align: center;
-	}
-
-	.qr-clean-title {
-		font-size: var(--text-sm);
-		font-weight: 700;
-		color: var(--color-ink);
+	.panel-title {
 		margin: 0;
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--fg);
 	}
-
-	.qr-clean-hint {
-		font-size: 11px;
-		color: var(--color-ink-light);
-	}
-
-	/* QR Box: 1:1 Aspect Ratio, expanding across full width, maintaining outline */
-	.qr-box {
-		width: 100%;
-		aspect-ratio: 1 / 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: #ffffff;
-		border: 1.5px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 14px;
-		box-sizing: border-box;
-		box-shadow: 0 1px 4px rgba(28, 25, 23, 0.06);
-	}
-
-	.qr-code-img {
-		display: block;
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		border-radius: 4px;
-	}
-
-	.qr-url-pill {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-full);
-		padding: 4px 10px;
-		width: 100%;
-		box-sizing: border-box;
-	}
-
-	.qr-url-short {
-		flex: 1;
-		font-size: 11px;
-		font-family: var(--font-mono);
-		color: var(--color-ink-light);
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.panel-meta {
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
 		white-space: nowrap;
 	}
-
-	.url-action-btn {
-		padding: 2px 4px;
-		color: var(--color-ink);
-		border-radius: 3px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		transition: color var(--transition-fast);
-	}
-
-	.url-action-btn:hover {
-		color: var(--color-accent);
-	}
-
-	.copied-tag {
-		font-size: 10px;
-		font-weight: 700;
-		color: var(--color-success);
-	}
-
-	.qr-loading-box {
-		width: 100%;
-		aspect-ratio: 1 / 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		background: #ffffff;
-		border: 1.5px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		box-sizing: border-box;
-		color: var(--color-ink-light);
-		font-size: var(--text-xs);
-	}
-
-	.qr-err-text {
-		font-size: var(--text-xs);
-		color: var(--color-coral);
+	.panel-hint {
 		margin: 0;
-		text-align: center;
+		font-size: 0.62rem;
+		line-height: 1.45;
+		color: var(--fg-dim);
 	}
 
-	/* ── 2. Action Buttons Below QR: Matches QR width ── */
-	.copies-choice {
+	/* ── Lembar strip ───────────────────────────────────────── */
+	.sheet-well {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 180px;
+		padding: 10px;
+		border-radius: 8px;
+		background: var(--paper);
+		box-shadow: 0 8px 20px rgba(11, 10, 9, 0.16);
+	}
+	.sheet-canvas {
+		display: block;
+		width: auto;
+		height: auto;
+		max-width: 100%;
+		max-height: 56vh;
+	}
+	.sheet-size {
+		margin: 0;
+		font-size: 0.58rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+	.copies {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		width: 100%;
-		padding: 10px 12px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-surface);
 	}
-
 	.copies-label {
-		font-size: 0.58rem;
-		font-weight: 800;
-		letter-spacing: 0.2em;
-		color: var(--color-ink-light);
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--fg-dim);
 	}
-
 	.copies-buttons {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 6px;
 	}
-
 	.copies-btn {
-		min-height: 40px;
+		min-height: 44px;
 		padding: 0 10px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-full);
+		border: 1px solid var(--hairline);
+		border-radius: 8px;
 		background: transparent;
-		color: var(--color-ink);
-		font-size: 0.62rem;
-		font-weight: 800;
-		letter-spacing: 0.12em;
+		color: var(--fg);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		cursor: pointer;
-		transition:
-			background-color 160ms ease,
-			color 160ms ease,
-			border-color 160ms ease;
 	}
-
 	.copies-btn:hover {
-		border-color: var(--color-ink);
+		border-color: var(--fg);
 	}
-
 	.copies-btn.is-active {
-		background: var(--color-ink);
-		border-color: var(--color-ink);
-		color: var(--color-surface);
+		background: var(--fg);
+		border-color: var(--fg);
+		color: var(--bg);
 	}
 
-	.copies-btn:focus-visible {
-		outline: 2.5px solid var(--color-accent);
-		outline-offset: 3px;
+	/* ── Foto sesi ──────────────────────────────────────────── */
+	.photo-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+		gap: 8px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.photo-cell {
+		position: relative;
+		overflow: hidden;
+		border: 1px solid var(--ring-line);
+		border-radius: 6px;
+		background: var(--veil-edge);
+	}
+	.photo-cell img {
+		display: block;
+		width: 100%;
+		aspect-ratio: 2 / 3;
+		object-fit: cover;
+	}
+	.photo-index {
+		position: absolute;
+		left: 6px;
+		bottom: 6px;
+		padding: 2px 6px;
+		border-radius: 999px;
+		background: rgba(11, 10, 9, 0.72);
+		color: #fbf7f0;
+		font-size: 0.54rem;
+		line-height: 1.2;
+	}
+	.empty-note {
+		margin: 0;
+		font-size: 0.66rem;
+		line-height: 1.45;
+		color: var(--fg-dim);
 	}
 
-	.print-actions-wrapper {
+	/* ── Video / GIF ────────────────────────────────────────── */
+	.video-frame {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		border-radius: 8px;
+		background: #000;
+	}
+	.video-frame video,
+	.video-frame img {
+		display: block;
+		width: 100%;
+		max-height: 30vh;
+		object-fit: contain;
+		background: #000;
+	}
+	.empty-box {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		width: 100%;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 12px;
+		border: 1px dashed var(--hairline);
+		border-radius: 8px;
+	}
+	.empty-box p {
+		margin: 0;
+		font-size: 0.66rem;
+		line-height: 1.45;
+		color: var(--fg-dim);
 	}
 
-	.print-btn-with-info {
+	/* ── QR ─────────────────────────────────────────────────── */
+	.qr-box {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		width: 100%;
+		justify-content: center;
+		aspect-ratio: 1 / 1;
+		padding: 10px;
+		border: 1px solid var(--ring-line);
+		border-radius: 10px;
+		background: #fff;
+		box-sizing: border-box;
 	}
-
-	.btn-print-main {
+	.qr-box img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+	.qr-loading {
+		flex-direction: column;
+		gap: 10px;
+		border-style: dashed;
+		background: var(--paper);
+		color: #1c1917;
+		font-size: 0.6rem;
+	}
+	.qr-hint {
+		margin: 0;
+		font-size: 0.62rem;
+		line-height: 1.45;
+		color: var(--fg-dim);
+	}
+	.qr-link {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 4px 4px 12px;
+		border: 1px solid var(--ring-line);
+		border-radius: 999px;
+	}
+	.qr-url {
 		flex: 1;
-		padding: 10px 16px;
-		font-size: var(--text-sm);
-		font-weight: 700;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 8px;
-		border-radius: var(--radius-md);
+		min-width: 0;
+		font-size: 0.54rem;
+		color: var(--fg-dim);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
-
-	.printer-info-icon-btn {
-		width: 42px;
-		height: 42px;
-		border-radius: 50%;
-		background: var(--color-surface);
-		border: 1.5px solid var(--color-border);
-		color: var(--color-ink-light);
-		display: flex;
+	.qr-btn {
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		min-height: 44px;
+		padding: 0 12px;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--fg);
+		font-size: 0.56rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		text-decoration: none;
 		cursor: pointer;
 		flex-shrink: 0;
-		transition: all var(--transition-fast);
-		box-shadow: var(--shadow-sm);
+	}
+	.qr-btn:hover {
+		border-color: var(--fg);
+		background: var(--ring-line);
 	}
 
-	.printer-info-icon-btn:hover {
-		border-color: var(--color-accent);
-		color: var(--color-accent);
-		transform: scale(1.05);
+	/* ── Aksi ───────────────────────────────────────────────── */
+	.panel-actions {
+		gap: 8px;
 	}
-
-	.btn-download-main {
-		width: 100%;
-		padding: 9px 16px;
-		font-size: var(--text-xs);
-		font-weight: 600;
-		display: flex;
+	.capsule-cta {
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		border-radius: var(--radius-md);
+		gap: 10px;
+		width: 100%;
+		min-height: 48px;
+		padding: 0 20px;
+		border: none;
+		border-radius: 999px;
+		background: var(--fg);
+		color: var(--bg);
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			background-color 200ms ease,
+			color 200ms ease,
+			box-shadow 200ms ease;
+	}
+	.capsule-cta:hover:not(:disabled) {
+		background: transparent;
+		color: var(--fg);
+		box-shadow: inset 0 0 0 2px var(--fg);
+	}
+	.capsule-cta:disabled {
+		opacity: 0.55;
+		cursor: progress;
+	}
+	.ghost-btn {
+		width: 100%;
+		min-height: 44px;
+		padding: 0 14px;
+		border: 1px solid var(--hairline);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--fg);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.ghost-btn:hover:not(:disabled) {
+		border-color: var(--fg);
+		background: var(--ring-line);
+	}
+	.ghost-btn:disabled {
+		opacity: 0.55;
+		cursor: progress;
 	}
 
-	.btn-spinner {
+	.error-note {
+		margin: 0;
+		padding: 8px 10px;
+		border: 1px solid #b42318;
+		border-radius: 8px;
+		background: rgba(180, 35, 24, 0.08);
+		color: #b42318;
+		font-size: 0.64rem;
+		line-height: 1.45;
+	}
+	.print-screen:not(.theme-light) .error-note {
+		border-color: #e8837a;
+		background: rgba(232, 131, 122, 0.1);
+		color: #f0a49c;
+	}
+	.ok-note {
+		margin: 0;
+		padding: 8px 10px;
+		border: 1px solid #0f6b3d;
+		border-radius: 8px;
+		background: rgba(15, 107, 61, 0.08);
+		color: #0f6b3d;
+		font-size: 0.64rem;
+		line-height: 1.45;
+	}
+	.print-screen:not(.theme-light) .ok-note {
+		border-color: #7ee2a8;
+		background: rgba(126, 226, 168, 0.1);
+		color: #7ee2a8;
+	}
+
+	.spinner {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top-color: white;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
+		flex-shrink: 0;
 	}
-
-	.btn-secondary .btn-spinner {
-		border: 2px solid rgba(28, 25, 23, 0.2);
-		border-top-color: var(--color-ink);
-	}
-
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
 		}
 	}
 
-	/* ── Bottom Reset ── */
-	.bottom-reset-wrap {
-		width: 100%;
-		display: flex;
-		justify-content: center;
-		padding-top: 2px;
-	}
-
-	.inline-icon-btn {
-		width: 100%;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		font-size: 11px;
-		color: var(--color-ink-light);
-	}
-
-	.inline-icon-btn:hover {
-		color: var(--color-ink);
-	}
-
-	/* ── Printer Setup Modal / Popover ── */
-	.printer-modal-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(28, 25, 23, 0.45);
-		z-index: 100;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 16px;
-	}
-
-	.printer-modal-card {
-		background: white;
-		border: 1.5px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 20px 22px;
-		max-width: 380px;
-		width: 100%;
-		box-shadow: var(--shadow-xl);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		animation: popIn 0.2s ease-out;
-	}
-
-	@keyframes popIn {
-		from {
-			opacity: 0;
-			transform: scale(0.95);
+	/* ── Isi satu layar: panel meregang mengisi sel grid ────── */
+	@media (min-width: 760px) {
+		.print-body {
+			grid-template-columns: minmax(0, 1fr) 292px;
+			grid-template-areas:
+				'sheet rail'
+				'photos rail'
+				'video rail';
+			grid-template-rows: minmax(0, 1.6fr) auto minmax(0, 1fr);
+			align-content: stretch;
+			padding: 18px;
+			gap: 14px;
 		}
-		to {
-			opacity: 1;
-			transform: scale(1);
+
+		.panel {
+			min-height: 0;
+		}
+		.panel-sheet,
+		.panel-video,
+		.panel-qr {
+			overflow: hidden;
+		}
+		.sheet-well {
+			flex: 1;
+			min-height: 0;
+		}
+		/* Kanvas mengisi kotak kertas; contain menjaga rasio strip. */
+		.sheet-canvas {
+			width: 100%;
+			height: 100%;
+			max-width: 100%;
+			max-height: 100%;
+			object-fit: contain;
+		}
+
+		/* Foto jadi satu baris filmstrip yang mengisi lebar panel. */
+		.photo-grid {
+			display: flex;
+			gap: 8px;
+			height: 132px;
+		}
+		.photo-cell {
+			flex: 1 1 0;
+			min-width: 0;
+			max-width: 240px;
+		}
+		.photo-cell img {
+			width: 100%;
+			height: 100%;
+			aspect-ratio: auto;
+		}
+
+		.video-frame {
+			flex: 1;
+			min-height: 0;
+		}
+		.video-frame video,
+		.video-frame img {
+			height: 100%;
+			max-height: none;
+		}
+		.empty-box {
+			flex: 1;
+			justify-content: center;
+		}
+
+		.panel-qr {
+			flex: 1;
+		}
+		.panel-qr .qr-box {
+			flex: 1;
+			min-height: 0;
+			aspect-ratio: auto;
+		}
+		.panel-qr .qr-box img {
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
 		}
 	}
 
-	.printer-modal-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		border-bottom: 1px solid var(--color-border);
-		padding-bottom: 10px;
+	@media (min-width: 1120px) {
+		.print-body {
+			grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr) 312px;
+			grid-template-areas:
+				'sheet photos rail'
+				'sheet video rail';
+			grid-template-rows: auto minmax(0, 1fr);
+			align-items: stretch;
+			padding: 20px;
+			gap: 16px;
+		}
 	}
 
-	.printer-modal-title-group {
-		display: flex;
-		align-items: center;
-		gap: 8px;
+	/* ── Fokus & gerak ──────────────────────────────────────── */
+	.print-screen button:focus-visible,
+	.print-screen a:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 3px;
 	}
-
-	.printer-modal-title-group h3 {
-		margin: 0;
-		font-size: var(--text-sm);
-		font-weight: 700;
-		color: var(--color-ink);
-	}
-
-	.modal-close-btn {
-		background: none;
-		border: none;
-		color: var(--color-muted);
-		font-size: 14px;
-		cursor: pointer;
-		padding: 4px;
-		border-radius: 4px;
-	}
-
-	.modal-close-btn:hover {
-		color: var(--color-ink);
-		background: var(--color-bg);
-	}
-
-	.printer-checklist {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		font-size: var(--text-xs);
-		color: var(--color-ink-light);
-	}
-
-	.printer-checklist li strong {
-		color: var(--color-ink);
-	}
-
-	.cutting-hint-modal {
-		padding: 8px 12px;
-		background: #fffbeb;
-		border: 1px dashed #fcd34d;
-		border-radius: var(--radius-md);
-		font-size: 11px;
-		color: #78350f;
-		line-height: 1.4;
+	@media (prefers-reduced-motion: reduce) {
+		.spinner {
+			animation-duration: 2.4s;
+		}
 	}
 </style>

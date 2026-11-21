@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { loadGallerySession, buildAnimatedGif } from '#lib/services/gallery';
 	import { playGrekSound } from '#lib/utils/audio';
-	import { goTo } from '#lib/stores/session';
 	import { getProductForCount } from '#lib/utils/canvas';
 	import type { GallerySession } from '#lib/types';
 
@@ -20,6 +19,9 @@
 	let gifGenerating = false;
 	let gifError: string | null = null;
 
+	// Video file state
+	let videoError = false;
+
 	// Live Looping Frame Player state (for GIF card)
 	let currentLoopFrame = 0;
 	let isLoopPlaying = true;
@@ -36,7 +38,7 @@
 
 	interface GalleryCard {
 		id: string;
-		type: 'strip' | 'photo' | 'gif';
+		type: 'strip' | 'photo' | 'gif' | 'video';
 		badge: string;
 		title: string;
 		subtitle: string;
@@ -50,6 +52,7 @@
 	$: produk = galleryData
 		? getProductForCount(galleryData.photos.length, galleryData.formatId ?? '2x6')
 		: getProductForCount(4, '2x6');
+	$: produkCm = produk.cm.includes('cm') ? produk.cm : `${produk.cm} cm`;
 
 	$: cardItems = galleryData
 		? ([
@@ -58,7 +61,7 @@
 					type: 'strip',
 					badge: 'HASIL STRIP 4R',
 					title: `Photo Strip (${produk.nama})`,
-					subtitle: `${produk.nama} ${produk.cm} cm — ${produk.copySheet === 2 ? '2 salinan berdampingan' : '1 salinan'} siap cetak`,
+					subtitle: `${produk.nama} ${produkCm}: ${produk.copySheet === 2 ? '2 salinan berdampingan' : '1 salinan'} siap cetak`,
 					imageUrl: galleryData.stripDataUrl,
 					downloadAction: downloadStrip,
 					btnLabel: 'Unduh Strip 4R'
@@ -83,7 +86,21 @@
 					imageUrl: '',
 					downloadAction: downloadGif,
 					btnLabel: 'Unduh File GIF'
-				}
+				},
+				...(galleryData.videoDataUrl
+					? ([
+							{
+								id: 'video',
+								type: 'video',
+								badge: 'VIDEO TIMELAPSE',
+								title: 'Video Timelapse (MP4)',
+								subtitle: 'Video timelapse dari sesi foto',
+								imageUrl: galleryData.videoDataUrl,
+								downloadAction: downloadVideo,
+								btnLabel: 'Unduh Video MP4'
+							}
+						] as GalleryCard[])
+					: [])
 			] as GalleryCard[])
 		: ([] as GalleryCard[]);
 
@@ -115,13 +132,6 @@
 
 	function setLoopSpeed(ms: number): void {
 		loopIntervalMs = ms;
-		if (isLoopPlaying) {
-			startLoopTimer();
-		}
-	}
-
-	function jumpToFrame(index: number): void {
-		currentLoopFrame = index;
 		if (isLoopPlaying) {
 			startLoopTimer();
 		}
@@ -215,6 +225,7 @@
 			if (!galleryData) {
 				error = 'Sesi foto tidak ditemukan atau sudah kadaluarsa.';
 			} else {
+				videoError = false;
 				// Start live frame looper immediately
 				startLoopTimer();
 
@@ -282,6 +293,12 @@
 		}
 	}
 
+	function downloadVideo(): void {
+		if (galleryData?.videoDataUrl) {
+			downloadDataUrl(galleryData.videoDataUrl, 'distudio-timelapse.mp4');
+		}
+	}
+
 	async function downloadAll(): Promise<void> {
 		if (!galleryData || downloadingAll) return;
 		downloadingAll = true;
@@ -299,6 +316,12 @@
 		// 3. Download GIF
 		if (gifDataUrl) {
 			downloadGif();
+			await new Promise((r) => setTimeout(r, 350));
+		}
+
+		// 4. Download video
+		if (galleryData.videoDataUrl) {
+			downloadVideo();
 		}
 
 		downloadingAll = false;
@@ -348,13 +371,13 @@
 	{:else if galleryData}
 		<!-- Top Header Bar -->
 		<header class="gallery-header">
-			<div class="header-left">
-				<div class="gallery-brand">
-					<span class="brand-dot"></span>
-					<span class="brand-name">DISTUDIO</span>
-					<span class="brand-dot"></span>
-				</div>
-				<p class="gallery-date">{formatDate(galleryData.createdAt)}</p>
+			<div class="gallery-brand-row">
+				<span class="brand-dot" aria-hidden="true"></span>
+				<span class="brand-name">DISTUDIO</span>
+				<span class="brand-dot" aria-hidden="true"></span>
+				<time class="gallery-date" datetime={galleryData.createdAt}
+					>{formatDate(galleryData.createdAt)}</time
+				>
 			</div>
 
 			<div class="header-actions">
@@ -488,7 +511,7 @@
 												<circle cx="8.5" cy="8.5" r="1.5" />
 												<polyline points="21 15 16 10 5 21" />
 											</svg>
-										{:else if card.type === 'gif'}
+										{:else if card.type === 'gif' || card.type === 'video'}
 											<svg
 												width="12"
 												height="12"
@@ -534,6 +557,26 @@
 												</div>
 											{/if}
 										</div>
+									{:else if card.type === 'video' && card.imageUrl}
+										<!-- svelte-ignore a11y_media_has_caption -->
+										{#if videoError}
+											<img
+												src={galleryData.gifDataUrl || galleryData.photos?.[0] || ''}
+												alt="Animasi looping dari GIF"
+												class="card-img photo-img-fit"
+											/>
+										{:else}
+											<video
+												src={card.imageUrl}
+												class="card-img photo-img-fit"
+												autoplay
+												loop
+												muted
+												playsinline
+												controls
+												on:error={() => (videoError = true)}
+											></video>
+										{/if}
 									{/if}
 								</div>
 
@@ -654,7 +697,8 @@
 	.gallery-header {
 		width: 100%;
 		max-width: 960px;
-		padding: 16px 20px;
+		min-height: 56px;
+		padding: 12px 20px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -664,16 +708,11 @@
 		border-bottom: 1.5px solid var(--color-border, #e5ddd5);
 	}
 
-	.header-left {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.gallery-brand {
+	.gallery-brand-row {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-width: 0;
 	}
 
 	.brand-name {
@@ -689,12 +728,14 @@
 		height: 6px;
 		border-radius: 50%;
 		background: #d97706;
+		flex-shrink: 0;
 	}
 
 	.gallery-date {
 		font-size: 0.72rem;
 		color: var(--color-ink-light, #78716c);
 		margin: 0;
+		white-space: nowrap;
 	}
 
 	.header-actions {
@@ -706,12 +747,14 @@
 	.dl-all-pill-btn {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 8px;
+		min-height: 44px;
 		background: var(--color-ink, #1c1917);
 		color: white;
 		border: none;
 		border-radius: var(--radius-full, 9999px);
-		padding: 8px 18px;
+		padding: 10px 18px;
 		font-size: 0.82rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -1201,7 +1244,8 @@
 		}
 
 		.dl-all-pill-btn {
-			padding: 6px 14px;
+			min-height: 44px;
+			padding: 10px 14px;
 			font-size: 0.75rem;
 		}
 

@@ -1,9 +1,17 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { session } from '#lib/stores/session';
+	import { loadCustomFrameSizes } from '#lib/services/frameSizes';
+	import { loadCustomAssets } from '#lib/services/customAssets';
 
 	let { children }: { children: Snippet } = $props();
+
+	onMount(() => {
+		void loadCustomFrameSizes();
+		void loadCustomAssets();
+	});
 
 	// Token daisyUI (bg-base-100, btn-primary, dst.) mengikuti data-theme di
 	// <html> — satu sumber di sini agar semua layar ikut tema kios.

@@ -87,11 +87,6 @@ export async function hasMultipleCameras(): Promise<boolean> {
 	}
 }
 
-/** Get the current facing mode. */
-export function getCurrentFacingMode(): FacingMode {
-	return currentFacingMode;
-}
-
 /** Attach stream to a video element. */
 export function attachStream(videoEl: HTMLVideoElement, stream: MediaStream): Promise<void> {
 	videoEl.srcObject = stream;

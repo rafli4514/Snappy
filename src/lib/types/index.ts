@@ -7,7 +7,7 @@
 // ─── App shell ────────────────────────────────────────────────────────────────
 
 export type Screen =
-	'start' | 'strip' | 'camera' | 'review' | 'editor' | 'edit' | 'decorate' | 'print';
+	'start' | 'strip' | 'camera' | 'review' | 'editor' | 'edit' | 'decorate' | 'timelapse' | 'print';
 
 export type KioskTheme = 'dark' | 'light';
 
@@ -23,12 +23,23 @@ export type CameraFilter = 'none' | 'grayscale' | 'sepia' | 'high-contrast' | 'w
 
 export type GridOverlay = 'none' | 'thirds';
 
+/** Preferensi timelapse/video (dipakai di /timelapse). */
+export interface TimelapseSettings {
+	/** Auto-generate saat buka /timelapse dan saat pengaturan berubah (debounce). */
+	auto: boolean;
+	speedMul: TimelapseSpeedMul;
+	transition: 'none' | 'crossfade';
+	/** Buat video MP4 selain GIF. */
+	makeVideo: boolean;
+}
+
 export interface CameraSettings {
 	theme: CameraTheme;
 	timer: TimerDuration;
 	flash: FlashMode;
 	filter: CameraFilter;
 	grid: GridOverlay;
+	timelapse: TimelapseSettings;
 }
 
 export interface SessionState {
@@ -50,7 +61,6 @@ export interface SessionState {
 	activeFrame: PhotoFrame | null;
 	/** Index foto yang dipakai (urut kronologis = urutan strip). Panjang = photoCount. */
 	selectedPhotoIndices: number[];
-	customTemplateData: CustomTemplate | null;
 	theme: KioskTheme;
 	cameraSettings: CameraSettings;
 	/** Per-photo edit transforms (rotation / flip / zoom) for the edit screen. */
@@ -59,6 +69,12 @@ export interface SessionState {
 	stickers: StickerLayer[];
 	/** Active color filter for the strip (editor edit screen). */
 	photoFilter: string | null;
+	/** GIF timelapse dari foto sesi (halaman timelapse). */
+	timelapseDataUrl: string | null;
+	/** Video MP4 (data URL) untuk unduh/unggah galeri; bisa besar. */
+	timelapseVideoDataUrl: string | null;
+	/** Metadata hasil timelapse terakhir (untuk deteksi perubahan pengaturan). */
+	timelapseMeta: TimelapseMeta | null;
 	/** Mirror horizontal preview — default ON per booth spec. */
 	flipHorizontal: boolean;
 }
@@ -124,36 +140,6 @@ export interface CustomSlot {
 	offsetY: number;
 }
 
-export interface DecorativeLayer {
-	id: string;
-	name: string;
-	type: 'image' | 'sticker' | 'ribbon';
-	/** PNG or SVG data URL. */
-	src: string;
-	/** 0..1 normalized left. */
-	x: number;
-	/** 0..1 normalized top. */
-	y: number;
-	/** 0..1 normalized width. */
-	width: number;
-	/** 0..1 normalized height. */
-	height: number;
-	/** Degrees (-180 to 180). */
-	rotation: number;
-	/** 0.0 to 1.0. */
-	opacity: number;
-	/** Layer stacking order. */
-	zIndex: number;
-	/** Prevent canvas drag/transform. */
-	locked: boolean;
-	/** Hide from canvas rendering. */
-	hidden: boolean;
-	/** Preserve original aspect ratio. */
-	aspectRatioLocked: boolean;
-	/** width / height ratio. */
-	aspectRatio?: number;
-}
-
 export interface CustomTemplate {
 	id: string;
 	name: string;
@@ -168,21 +154,9 @@ export interface CustomTemplate {
 	/** Target strip height in px at 300 DPI (default 1800). */
 	height?: number;
 	slots: CustomSlot[];
-	overlays?: DecorativeLayer[];
 	isCustom: boolean;
 	createdAt?: number;
 	updatedAt?: number;
-}
-
-/** Ready-to-use decorative sticker definitions (`svg` is raw markup). */
-export interface BuiltinSticker {
-	id: string;
-	name: string;
-	type: 'ribbon' | 'sticker';
-	width: number;
-	height: number;
-	aspectRatio: number;
-	svg: string;
 }
 
 /** Per-photo edit transform: rotation (0/90/180/270), mirror, zoom. */
@@ -208,6 +182,8 @@ export interface StickerLayer {
 	h: number;
 	rotation?: number;
 	opacity?: number;
+	flipH?: boolean;
+	flipV?: boolean;
 }
 
 // ─── Built-in strip presets ──────────────────────────────────────────────────
@@ -235,7 +211,7 @@ export function isCustomTemplate(template: ResolvedTemplate): template is Custom
 
 // ─── Print products ──────────────────────────────────────────────────────────
 
-export interface ProductRow {
+interface ProductRow {
 	h: number;
 	cells: { w: number }[];
 }
@@ -269,9 +245,6 @@ export interface RenderOptions {
 	showDate?: boolean;
 	/** Draw the caption/date band on custom templates too. */
 	renderCaptionOnCustom?: boolean;
-	/** Draw editor wireframes over slots (template builder mode). */
-	showWireframes?: boolean;
-	selectedSlotId?: string | null;
 	/** Draw slot number badges (1, 2, 3...) on preview slots. Defaults to true in editor. */
 	showSlotNumbers?: boolean;
 	/** Per-photo rotation / flip / zoom applied on top of the slot layout. */
@@ -288,6 +261,16 @@ export interface RenderOptions {
 	formatId?: string | null;
 }
 
+// ─── Timelapse (halaman timelapse) ──────────────────────────────────────────
+
+export type TimelapseSpeedMul = 0.25 | 0.5 | 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2;
+
+export interface TimelapseMeta {
+	speedMul: TimelapseSpeedMul;
+	transition: 'none' | 'crossfade';
+	hasVideo: boolean;
+}
+
 // ─── Gallery sessions ────────────────────────────────────────────────────────
 
 export interface GallerySession {
@@ -298,4 +281,6 @@ export interface GallerySession {
 	templateKey: string;
 	formatId?: string;
 	gifDataUrl?: string | null;
+	/** Video MP4 timelapse (data URL); opsional, bisa besar. */
+	videoDataUrl?: string | null;
 }

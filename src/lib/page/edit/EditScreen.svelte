@@ -7,42 +7,65 @@
 		addSticker,
 		moveSticker,
 		removeSticker,
+		moveStickerLayer,
+		updateSticker,
 		updatePhotoTransform,
 		stripPhotos
 	} from '#lib/stores/session';
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
-	import { BUILTIN_STICKERS } from '#lib/utils/customTemplateStorage';
 	import {
+		findStickerByDbId,
+		getStickerCategories,
 		getStickersByCategory,
-		STICKER_ASSETS,
-		STICKER_CATEGORIES,
-		VINTAGE_STICKER_ASSETS,
+		stickerSrc,
 		type StickerAsset
 	} from '#lib/data/stickers';
-	import { PHOTO_FILTERS } from '#lib/data/filters';
-	import type { BuiltinSticker, PhotoTransform, StickerLayer } from '#lib/types';
+	import { findPhotoFilter, getFilterGroups } from '#lib/data/filters';
+	import { customFiltersStore, customStickersStore } from '#lib/services/customAssets';
+	import type { PhotoTransform, StickerLayer } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
 	let dragStickerId: string | null = null;
+	let dragStickerOffset = { x: 0, y: 0 };
+	let dragLayerId: string | null = null;
 	let selectedPhoto = 0;
 
 	$: theme = $session.theme;
 	$: photos = $stripPhotos;
 	$: photoCount = $session.photoCount;
 	$: activeFrame = $session.activeFrame;
-	$: customTemplateData = $session.customTemplateData;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
 	$: photoTransforms = $session.photoTransforms;
 	$: stickers = $session.stickers;
 	$: photoFilter = $session.photoFilter;
-	$: photoFilterCss = PHOTO_FILTERS.find((f) => f.key === photoFilter)?.cssFilter ?? 'none';
-	$: stickerList = getStickersByCategory(selectedStickerCategory);
+	$: photoFilterCss =
+		(void $customFiltersStore,
+		photoFilter ? (findPhotoFilter(photoFilter)?.cssFilter ?? 'none') : 'none');
+	$: stickerCategories = (void $customStickersStore, getStickerCategories());
+	$: if (
+		stickerCategories.length &&
+		!stickerCategories.some((c) => c.key === selectedStickerCategory)
+	) {
+		selectedStickerCategory = stickerCategories[0].key;
+	}
+	$: stickerList = (void $customStickersStore, getStickersByCategory(selectedStickerCategory));
+	$: if (selectedStickerId && !stickers.some((s) => s.id === selectedStickerId))
+		selectedStickerId = null;
+	$: selectedSticker = selectedStickerId
+		? (stickers.find((s) => s.id === selectedStickerId) ?? null)
+		: null;
+	$: stickerSizePct = selectedSticker ? Math.round((selectedSticker.w / 0.3) * 100) : 100;
+	$: stickerRotation = Math.round(selectedSticker?.rotation ?? 0);
+	$: stickerOpacityPct = Math.round((selectedSticker?.opacity ?? 1) * 100);
+	$: stickerPosXPct = selectedSticker ? Math.round(selectedSticker.x * 100) : 0;
+	$: stickerPosYPct = selectedSticker ? Math.round(selectedSticker.y * 100) : 0;
+	$: backTarget = (mode === 'decorate' ? 'edit' : 'editor') as 'edit' | 'editor';
+	$: backLabel = mode === 'decorate' ? 'Kembali ke edit foto' : 'Kembali ke desain strip';
+	$: ctaLabel = mode === 'decorate' ? 'LANJUT' : 'LANJUT DEKORASI';
 
-	$: activeTemplate = activeFrame
-		? frameToTemplate(activeFrame)
-		: customTemplateData || $session.selectedTemplate;
+	$: activeTemplate = activeFrame ? frameToTemplate(activeFrame) : $session.selectedTemplate;
 	// Nilai transform foto terpilih — dipakai reaktif di template (label & slider)
 	$: selectedTransform = photoTransforms[selectedPhoto] ?? null;
 	$: rotationValue = selectedTransform?.rotation ?? 0;
@@ -53,34 +76,51 @@
 	$: posXAtDefault = (selectedTransform?.offsetX ?? 0) === 0;
 	$: posYAtDefault = (selectedTransform?.offsetY ?? 0) === 0;
 
-	export let initialTab: 'foto' | 'filter' | 'sticker' = 'foto';
-	type PanelTab = 'foto' | 'filter' | 'sticker';
-	let activeTab: PanelTab = initialTab;
+	export let mode: 'edit' | 'decorate' = 'edit';
+
+	type PanelTab = 'foto' | 'filter' | 'layer' | 'stiker';
+	$: visibleTabs =
+		mode === 'decorate'
+			? ([
+					{ id: 'filter' as PanelTab, label: 'Filter' },
+					{ id: 'layer' as PanelTab, label: 'Layer' },
+					{ id: 'stiker' as PanelTab, label: 'Stiker' }
+				] as const)
+			: ([{ id: 'foto' as PanelTab, label: 'Foto' }] as const);
+	let activeTab: PanelTab = mode === 'decorate' ? 'filter' : 'foto';
+	$: if (!visibleTabs.some((t) => t.id === activeTab)) {
+		activeTab = visibleTabs[0]?.id ?? 'foto';
+	}
+
 	let selectedStickerCategory = 'Vintage';
+	let selectedStickerId: string | null = null;
 
 	let showSlotNumbers = true;
 	let renderSeq = 0;
 
-	// Filter foto: 5 kategori.
-	const FILTER_GROUPS = [
-		{
-			label: 'Essential',
-			key: 'essential',
-			filters: PHOTO_FILTERS.filter((f) => f.category === 'Essential')
-		},
-		{ label: 'Retro', key: 'retro', filters: PHOTO_FILTERS.filter((f) => f.category === 'Retro') },
-		{ label: 'Fun', key: 'fun', filters: PHOTO_FILTERS.filter((f) => f.category === 'Fun') },
-		{
-			label: 'Distort',
-			key: 'distort',
-			filters: PHOTO_FILTERS.filter((f) => f.category === 'Distort')
-		},
-		{
-			label: 'B&W',
-			key: 'bw',
-			filters: PHOTO_FILTERS.filter((f) => f.category === 'Black & White')
-		}
-	];
+	const FILTER_LABELS: Record<string, string> = {
+		Essential: 'Essential',
+		Retro: 'Retro',
+		Fun: 'Fun',
+		Distort: 'Distort',
+		'Black & White': 'B&W',
+		Custom: 'Custom'
+	};
+	$: filterGroups =
+		(void $customFiltersStore,
+		(() => {
+			const groups = getFilterGroups();
+			const order = ['Essential', 'Retro', 'Fun', 'Distort', 'Black & White'];
+			const keys = [
+				...order.filter((k) => groups[k]?.length),
+				...Object.keys(groups).filter((k) => !order.includes(k) && groups[k]?.length)
+			];
+			return keys.map((k) => ({
+				key: k,
+				label: FILTER_LABELS[k] || k,
+				filters: groups[k]
+			}));
+		})());
 
 	async function renderPreview(): Promise<void> {
 		if (!canvas) return;
@@ -190,8 +230,44 @@
 		updatePhotoTransform(selectedPhoto, next);
 	}
 
-	function startStickerDrag(id: string): void {
+	function startStickerDrag(id: string, grab?: { fx: number; fy: number }): void {
 		dragStickerId = id;
+		selectedStickerId = id;
+		if (grab) {
+			const layer = stickers.find((l) => l.id === id);
+			dragStickerOffset = layer ? { x: grab.fx - layer.x, y: grab.fy - layer.y } : { x: 0, y: 0 };
+		} else {
+			dragStickerOffset = { x: Number.NaN, y: Number.NaN }; // center-on-cursor
+		}
+	}
+
+	/** Hit-test stiker di kanvas (preview strip penuh, topmost = urutan terakhir). */
+	function stickerHitAtPoint(clientX: number, clientY: number): StickerLayer | null {
+		const target = canvas;
+		if (!target) return null;
+		const rect = target.getBoundingClientRect();
+		if (!rect.width || !rect.height) return null;
+		const fx = (clientX - rect.left) / rect.width;
+		const fy = (clientY - rect.top) / rect.height;
+		const px = fx * target.width;
+		const py = fy * target.height;
+		for (let i = stickers.length - 1; i >= 0; i--) {
+			const st = stickers[i];
+			const sw = st.w * target.width;
+			const sh = st.h * target.height;
+			// Gambar stiker: translate ke (st.x*W, st.y*H), rotate, scale(flip), draw -sw/2,-sh/2
+			const cx = st.x * target.width;
+			const cy = st.y * target.height;
+			const dx = px - cx;
+			const dy = py - cy;
+			const ang = -((st.rotation || 0) * Math.PI) / 180;
+			const cos = Math.cos(ang);
+			const sin = Math.sin(ang);
+			const lx = dx * cos - dy * sin;
+			const ly = dx * sin + dy * cos;
+			if (lx >= -sw / 2 && lx <= sw / 2 && ly >= -sh / 2 && ly <= sh / 2) return st;
+		}
+		return null;
 	}
 
 	function preloadPanImages(list: string[]): void {
@@ -210,8 +286,9 @@
 		if (!rect.width || !rect.height) return;
 		const fx = (e.clientX - rect.left) / rect.width;
 		const fy = (e.clientY - rect.top) / rect.height;
-		const x = Math.max(0, Math.min(1 - layer.w, fx - layer.w / 2));
-		const y = Math.max(0, Math.min(1 - layer.h, fy - layer.h / 2));
+		const useCenter = Number.isNaN(dragStickerOffset.x) || Number.isNaN(dragStickerOffset.y);
+		const x = useCenter ? fx - layer.w / 2 : fx - dragStickerOffset.x;
+		const y = useCenter ? fy - layer.h / 2 : fy - dragStickerOffset.y;
 		moveSticker(layer.id, x, y);
 	}
 
@@ -220,41 +297,144 @@
 	}
 
 	function handleAddSticker(sticker: StickerAsset): void {
-		// Build a placeholder SVG sticker from the StickerAsset metadata
-		// Real WebP assets will be dropped in static/stickers/Pixel/ later
 		const layer: StickerLayer = {
 			id: `sticker-${sticker.dbId}-${Date.now()}`,
 			stickerId: `sticker-${sticker.dbId}`,
-			src: sticker.category
-				? `/stickers/${sticker.category === 'Vintage' ? 'vintage' : 'Pixel'}/${sticker.file}`
-				: undefined,
+			src: stickerSrc(sticker),
 			x: Math.max(0, 0.5 - 0.25),
 			y: 0.1,
-			w: sticker.size.w / 600,
-			h: sticker.size.h / 1800,
+			w: Math.min(0.6, Math.max(0.08, (sticker.size?.w || 200) / 600)),
+			h: Math.min(0.4, Math.max(0.04, (sticker.size?.h || 200) / 1800)),
 			rotation: 0,
 			opacity: 1
 		};
 		addSticker(layer);
-		startStickerDrag(layer.id);
+		selectedStickerId = layer.id;
 	}
 
 	function handleRemoveSticker(id: string): void {
 		removeSticker(id);
 		if (dragStickerId === id) endStickerDrag();
+		if (selectedStickerId === id) selectedStickerId = null;
 	}
 
 	function placedStickerName(id: string): string {
-		const builtin = BUILTIN_STICKERS.find((s) => s.id === id);
-		if (builtin) return builtin.name;
 		const dbId = Number(id.replace(/^sticker-/, ''));
-		const asset = [...STICKER_ASSETS, ...VINTAGE_STICKER_ASSETS].find((s) => s.dbId === dbId);
+		const asset = Number.isFinite(dbId) ? findStickerByDbId(dbId) : undefined;
 		return asset ? asset.name : id;
 	}
 
+	function stickerThumbSrc(l: StickerLayer): string {
+		return l.src ?? '';
+	}
+
 	function handleNext(): void {
-		// /edit (foto) → halaman berikutnya (/decorate = filter & sticker) → /print.
-		goTo(activeTab === 'foto' ? 'decorate' : 'print');
+		goTo(mode === 'decorate' ? 'timelapse' : 'decorate');
+	}
+
+	function handleStickerAdjust(
+		field: 'rotation' | 'opacity' | 'size' | 'posX' | 'posY',
+		e: Event & { currentTarget: HTMLInputElement }
+	): void {
+		if (!selectedStickerId || !selectedSticker) return;
+		const v = Number(e.currentTarget.value);
+		if (field === 'rotation') updateSticker(selectedStickerId, { rotation: v });
+		else if (field === 'opacity') updateSticker(selectedStickerId, { opacity: v / 100 });
+		else if (field === 'size') {
+			const aspect = selectedSticker.w / Math.max(0.001, selectedSticker.h);
+			const w = Math.max(0.03, Math.min(0.9, 0.3 * (v / 100)));
+			const h = w / Math.max(0.01, aspect);
+			updateSticker(selectedStickerId, { w, h });
+		} else if (field === 'posX') {
+			updateSticker(selectedStickerId, { x: v / 100 });
+		} else if (field === 'posY') {
+			updateSticker(selectedStickerId, { y: v / 100 });
+		}
+	}
+
+	function toggleStickerFlip(axis: 'h' | 'v'): void {
+		if (!selectedStickerId || !selectedSticker) return;
+		if (axis === 'h') updateSticker(selectedStickerId, { flipH: !selectedSticker.flipH });
+		else updateSticker(selectedStickerId, { flipV: !selectedSticker.flipV });
+	}
+
+	function resetSelectedSticker(): void {
+		if (!selectedStickerId || !selectedSticker) return;
+		const aspect = selectedSticker.w / Math.max(0.001, selectedSticker.h);
+		const w = 0.3;
+		const h = w / Math.max(0.01, aspect);
+		updateSticker(selectedStickerId, {
+			x: Math.max(0, 0.5 - w / 2),
+			y: 0.1,
+			w,
+			h,
+			rotation: 0,
+			opacity: 1,
+			flipH: false,
+			flipV: false
+		});
+	}
+
+	function placeStickerAt(nx: number, ny: number): void {
+		if (!selectedStickerId) return;
+		updateSticker(selectedStickerId, { x: nx, y: ny });
+	}
+
+	function placeStickerCenter(cx: number, cy: number): void {
+		if (!selectedSticker) return;
+		placeStickerAt(cx - selectedSticker.w / 2, cy - selectedSticker.h / 2);
+	}
+
+	/** Target posisi cepat: relatif ke strip/frame, dan ke slot bila frame custom punya slot. */
+	function framePositionTargets(): { key: string; label: string; cx: number; cy: number }[] {
+		const targets: { key: string; label: string; cx: number; cy: number }[] = [
+			{ key: 'tc', label: 'Atas', cx: 0.5, cy: 0.12 },
+			{ key: 'cc', label: 'Tengah', cx: 0.5, cy: 0.5 },
+			{ key: 'bc', label: 'Bawah', cx: 0.5, cy: 0.88 }
+		];
+		const custom = typeof activeTemplate === 'string' ? null : activeTemplate;
+		const slots = custom?.slots || [];
+		if (slots.length > 0) {
+			slots.forEach((s, i) => {
+				targets.push({
+					key: `slot-${i}`,
+					label: `Slot ${i + 1}`,
+					cx: s.x + s.width / 2,
+					cy: s.y + s.height / 2
+				});
+			});
+		}
+		return targets;
+	}
+
+	function rotateStickerQuick(delta: 90 | -90 = 90): void {
+		if (!selectedStickerId || !selectedSticker) return;
+		const base = Math.round(selectedSticker.rotation ?? 0);
+		// snap ke langkah 90° biar cepat/pasti
+		const snapped = Math.round(base / 90) * 90;
+		const next = (((snapped + delta) % 360) + 360) % 360;
+		// simpan 0..270 sebagai orientasi frame; slider -180..180 tetap bisa tampilkan ekuivalen
+		updateSticker(selectedStickerId, { rotation: next > 180 ? next - 360 : next });
+	}
+
+	function onLayerDragStart(id: string, e: DragEvent): void {
+		dragLayerId = id;
+		selectedStickerId = id;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', id);
+		}
+	}
+
+	function onLayerDragOver(targetId: string, e: DragEvent): void {
+		e.preventDefault();
+		if (!dragLayerId || dragLayerId === targetId) return;
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		moveStickerLayer(dragLayerId, targetId);
+	}
+
+	function onLayerDragEnd(): void {
+		dragLayerId = null;
 	}
 
 	/** Peta koordinat kanvas → slot foto (index + rect slot dalam px kanvas). */
@@ -395,6 +575,21 @@
 	} | null = null;
 
 	function handleCanvasPointerDown(e: PointerEvent): void {
+		// Prioritas: klik stiker = pilih layer + geser (langsung)
+		const stickerHit = stickerHitAtPoint(e.clientX, e.clientY);
+		if (stickerHit) {
+			photoDrag = null;
+			const rect = canvas?.getBoundingClientRect();
+			const fx = rect && rect.width ? (e.clientX - rect.left) / rect.width : 0;
+			const fy = rect && rect.height ? (e.clientY - rect.top) / rect.height : 0;
+			startStickerDrag(stickerHit.id, { fx, fy });
+			try {
+				canvas?.setPointerCapture(e.pointerId);
+			} catch {
+				/* ignore */
+			}
+			return;
+		}
 		const hit = photoHitAtPoint(e.clientX, e.clientY);
 		if (!hit) {
 			photoDrag = null;
@@ -470,6 +665,14 @@
 	}
 
 	function handleCanvasPointerUp(e: PointerEvent): void {
+		if (dragStickerId) {
+			endStickerDrag();
+			try {
+				if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+			} catch {
+				/* ignore */
+			}
+		}
 		if (photoDrag) {
 			// Klik (tanpa geser) memilih foto; drag hanya menggeser crop foto itu,
 			// jadi nilai Zoom di panel tidak ikut berpindah.
@@ -499,8 +702,8 @@
 		<button
 			type="button"
 			class="head-back-btn"
-			on:click={() => goTo('editor')}
-			aria-label="Kembali ke desain strip"
+			on:click={() => goTo(backTarget)}
+			aria-label={backLabel}
 		>
 			<svg
 				width="16"
@@ -516,7 +719,7 @@
 				<path d="M15 18l-6-6 6-6" />
 			</svg>
 		</button>
-		<h1 class="edit-head-title font-display">Edit Strip</h1>
+		<h1 class="edit-head-title font-display">{mode === 'decorate' ? 'Dekorasi' : 'Edit Strip'}</h1>
 		<span class="head-balance" aria-hidden="true"></span>
 	</header>
 
@@ -582,36 +785,18 @@
 
 		<aside class="templates-column" aria-label="Alat edit strip">
 			<div class="categories-header" role="tablist" aria-label="Kategori alat edit">
-				<button
-					type="button"
-					class="category-pill font-mono"
-					class:is-active={activeTab === 'foto'}
-					on:click={() => (activeTab = 'foto')}
-					role="tab"
-					aria-selected={activeTab === 'foto'}
-				>
-					Foto
-				</button>
-				<button
-					type="button"
-					class="category-pill font-mono"
-					class:is-active={activeTab === 'filter'}
-					on:click={() => (activeTab = 'filter')}
-					role="tab"
-					aria-selected={activeTab === 'filter'}
-				>
-					Filter
-				</button>
-				<button
-					type="button"
-					class="category-pill font-mono"
-					class:is-active={activeTab === 'sticker'}
-					on:click={() => (activeTab = 'sticker')}
-					role="tab"
-					aria-selected={activeTab === 'sticker'}
-				>
-					Sticker
-				</button>
+				{#each visibleTabs as tab (tab.id)}
+					<button
+						type="button"
+						class="category-pill font-mono"
+						class:is-active={activeTab === tab.id}
+						on:click={() => (activeTab = tab.id)}
+						role="tab"
+						aria-selected={activeTab === tab.id}
+					>
+						{tab.label}
+					</button>
+				{/each}
 			</div>
 
 			{#if activeTab === 'foto'}
@@ -724,7 +909,7 @@
 			{:else if activeTab === 'filter'}
 				<div class="tab-panel">
 					<div class="filter-groups">
-						{#each FILTER_GROUPS as group}
+						{#each filterGroups as group (group.key)}
 							<section class="filter-group" aria-label="Filter {group.label}">
 								<span class="filter-group-label font-mono">{group.label}</span>
 								<div class="filter-grid">
@@ -756,23 +941,228 @@
 						{/each}
 					</div>
 				</div>
-			{:else}
+			{:else if activeTab === 'layer'}
 				<div class="tab-panel">
-					<div class="sticker-toolbar">
-						<label class="sticker-select-label font-mono" for="sticker-category-select">
-							Kategori
-						</label>
-						<select
-							id="sticker-category-select"
-							class="sticker-select font-mono"
-							bind:value={selectedStickerCategory}
-						>
-							{#each STICKER_CATEGORIES as c (c.key)}
-								<option value={c.key}>{c.label}</option>
-							{/each}
-						</select>
+					<div class="layer-section">
+						<span class="filter-group-label font-mono">Layer stiker</span>
+						{#if stickers.length === 0}
+							<p class="layer-empty font-mono">
+								Belum ada layer stiker. Tambah stiker di tab <strong>Stiker</strong>.
+							</p>
+						{:else}
+							<div class="tab-sticker-list">
+								{#each stickers as l (l.id)}
+									<div
+										class="tab-sticker-item tab-sticker-item--select"
+										class:is-selected={selectedStickerId === l.id}
+										class:is-dragging={dragLayerId === l.id}
+										role="button"
+										tabindex="0"
+										draggable="true"
+										on:click={() => (selectedStickerId = l.id)}
+										on:keydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault();
+												selectedStickerId = l.id;
+											}
+										}}
+										on:dragstart={(e) => onLayerDragStart(l.id, e)}
+										on:dragover={(e) => onLayerDragOver(l.id, e)}
+										on:dragend={onLayerDragEnd}
+										aria-pressed={selectedStickerId === l.id}
+										aria-label="Layer {placedStickerName(l.stickerId)}, seret untuk urutkan"
+									>
+										<span class="layer-drag-handle font-mono" aria-hidden="true">⋮⋮</span>
+										{#if stickerThumbSrc(l)}
+											<img
+												class="layer-thumb"
+												src={stickerThumbSrc(l)}
+												alt=""
+												loading="lazy"
+												draggable="false"
+											/>
+										{:else}
+											<span class="layer-thumb layer-thumb--empty" aria-hidden="true"></span>
+										{/if}
+										<span class="layer-item-name font-mono">{placedStickerName(l.stickerId)}</span>
+										<span class="layer-item-actions">
+											<button
+												type="button"
+												class="tab-mini-btn font-mono"
+												on:click|stopPropagation={() => {
+													selectedStickerId = l.id;
+													startStickerDrag(l.id);
+												}}
+												aria-label="Geser stiker di kanvas">⇲</button
+											>
+											<button
+												type="button"
+												class="tab-mini-btn font-mono"
+												on:click|stopPropagation={() => handleRemoveSticker(l.id)}
+												aria-label="Hapus stiker">✕</button
+											>
+										</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
-					<div>
+
+					{#if selectedSticker}
+						<div class="layer-section layer-adjust" aria-label="Kontrol layer stiker">
+							<span class="filter-group-label font-mono"
+								>Edit: {placedStickerName(selectedSticker.stickerId)}</span
+							>
+							<label class="tab-slider" for="ly-size">
+								<span class="font-mono">Scale</span>
+								<input
+									id="ly-size"
+									type="range"
+									min={20}
+									max={250}
+									value={stickerSizePct}
+									on:input={(e) => handleStickerAdjust('size', e)}
+								/>
+								<span class="font-mono">{stickerSizePct}%</span>
+							</label>
+							<label class="tab-slider" for="ly-rotation">
+								<span class="font-mono">Putar</span>
+								<input
+									id="ly-rotation"
+									type="range"
+									min={-180}
+									max={180}
+									value={stickerRotation}
+									on:input={(e) => handleStickerAdjust('rotation', e)}
+								/>
+								<span class="font-mono">{stickerRotation}°</span>
+							</label>
+							<div class="tab-actions" role="group" aria-label="Putar cepat">
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									on:click={() => rotateStickerQuick(-90)}
+									aria-label="Putar kiri 90 derajat">⟲ 90°</button
+								>
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									on:click={() => rotateStickerQuick(90)}
+									aria-label="Putar kanan 90 derajat">⟳ 90°</button
+								>
+							</div>
+
+							<div class="tab-actions">
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									class:is-active={selectedSticker.flipH}
+									on:click={() => toggleStickerFlip('h')}
+									aria-pressed={selectedSticker.flipH}
+									aria-label="Flip horizontal stiker">⇋ Flip H</button
+								>
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									class:is-active={selectedSticker.flipV}
+									on:click={() => toggleStickerFlip('v')}
+									aria-pressed={selectedSticker.flipV}
+									aria-label="Flip vertikal stiker">⇅ Flip V</button
+								>
+							</div>
+
+							<span class="filter-group-label font-mono">Posisi (sesuai frame)</span>
+							<div
+								class="tab-actions preset-grid"
+								role="group"
+								aria-label="Posisi cepat sesuai frame"
+							>
+								{#each framePositionTargets() as t (t.key)}
+									<button
+										type="button"
+										class="tab-action-btn font-mono"
+										on:click={() => placeStickerCenter(t.cx, t.cy)}
+										aria-label="Posisi {t.label}">{t.label}</button
+									>
+								{/each}
+							</div>
+							<label class="tab-slider" for="ly-pos-x">
+								<span class="font-mono">X</span>
+								<input
+									id="ly-pos-x"
+									type="range"
+									min={-100}
+									max={200}
+									value={stickerPosXPct}
+									on:input={(e) => handleStickerAdjust('posX', e)}
+								/>
+								<span class="font-mono">{stickerPosXPct}</span>
+							</label>
+							<label class="tab-slider" for="ly-pos-y">
+								<span class="font-mono">Y</span>
+								<input
+									id="ly-pos-y"
+									type="range"
+									min={-100}
+									max={200}
+									value={stickerPosYPct}
+									on:input={(e) => handleStickerAdjust('posY', e)}
+								/>
+								<span class="font-mono">{stickerPosYPct}</span>
+							</label>
+
+							<span class="filter-group-label font-mono">Tampilan</span>
+							<label class="tab-slider" for="ly-opacity">
+								<span class="font-mono">Opacity</span>
+								<input
+									id="ly-opacity"
+									type="range"
+									min={10}
+									max={100}
+									value={stickerOpacityPct}
+									on:input={(e) => handleStickerAdjust('opacity', e)}
+								/>
+								<span class="font-mono">{stickerOpacityPct}%</span>
+							</label>
+
+							<div class="tab-actions">
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									on:click={resetSelectedSticker}
+									aria-label="Reset stiker">Reset</button
+								>
+								<button
+									type="button"
+									class="tab-action-btn font-mono"
+									on:click={() => selectedStickerId && handleRemoveSticker(selectedStickerId)}
+									aria-label="Hapus stiker">Hapus</button
+								>
+							</div>
+							<p class="layer-hint font-mono">Tip: geser stiker langsung di pratinjau strip.</p>
+						</div>
+					{:else if stickers.length > 0}
+						<p class="layer-hint font-mono">Pilih layer di daftar untuk mengontrol stiker.</p>
+					{/if}
+				</div>
+			{:else if activeTab === 'stiker'}
+				<div class="tab-panel">
+					<div class="layer-section">
+						<span class="filter-group-label font-mono">Tambah stiker</span>
+						<div class="sticker-toolbar">
+							<label class="sticker-select-label font-mono" for="sticker-category-select-stiker">
+								Kategori
+							</label>
+							<select
+								id="sticker-category-select-stiker"
+								class="sticker-select font-mono"
+								bind:value={selectedStickerCategory}
+							>
+								{#each stickerCategories as c (c.key)}
+									<option value={c.key}>{c.label}</option>
+								{/each}
+							</select>
+						</div>
 						<div class="sticker-grid">
 							{#each stickerList as s (s.dbId)}
 								<button
@@ -783,7 +1173,7 @@
 								>
 									<img
 										class="sticker-tile-img"
-										src={'/stickers/vintage/' + s.file}
+										src={stickerSrc(s)}
 										alt={s.name}
 										loading="lazy"
 										draggable="false"
@@ -793,27 +1183,11 @@
 							{/each}
 						</div>
 					</div>
-					{#if stickers.length > 0}
-						<div class="tab-sticker-list">
-							{#each stickers as l (l.id)}
-								<div class="tab-sticker-item">
-									<span class="font-mono">{placedStickerName(l.stickerId)}</span>
-									<button
-										type="button"
-										class="tab-mini-btn font-mono"
-										on:click={() => startStickerDrag(l.id)}
-										aria-label="Geser sticker">⇲</button
-									>
-									<button
-										type="button"
-										class="tab-mini-btn font-mono"
-										on:click={() => handleRemoveSticker(l.id)}
-										aria-label="Hapus sticker">✕</button
-									>
-								</div>
-							{/each}
-						</div>
-					{/if}
+
+					<p class="layer-hint font-mono">
+						Stiker yang ditambahkan akan masuk ke <strong>Layer</strong>. Buka tab
+						<strong>Layer</strong> untuk pilih dan atur (scale, flip, posisi, putar, opacity).
+					</p>
 				</div>
 			{/if}
 
@@ -824,7 +1198,7 @@
 					class="capsule-cta font-mono"
 					on:click={handleNext}
 				>
-					LANJUT CETAK
+					{ctaLabel}
 					<svg
 						viewBox="0 0 24 24"
 						width="14"
@@ -1124,7 +1498,7 @@
 
 	.categories-header {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
 		gap: 4px;
 		padding: 8px 10px 6px;
 	}
@@ -1180,6 +1554,15 @@
 		gap: 8px;
 	}
 
+	.tab-actions.preset-grid {
+		flex-wrap: wrap;
+	}
+
+	.tab-actions.preset-grid .tab-action-btn {
+		flex: 1 1 calc(33.333% - 8px);
+		min-width: 0;
+	}
+
 	.tab-action-btn {
 		flex: 1;
 		min-height: 44px;
@@ -1206,6 +1589,12 @@
 	.tab-action-btn:focus-visible {
 		outline: 2.5px solid var(--focus);
 		outline-offset: 2px;
+	}
+
+	.tab-action-btn.is-active {
+		background: var(--fg);
+		color: var(--bg);
+		border-color: var(--fg);
 	}
 
 	.tab-slider {
@@ -1476,6 +1865,79 @@
 		padding: 8px 10px;
 		border: 1px solid var(--hairline);
 		border-radius: 8px;
+		background: transparent;
+		color: var(--fg);
+		width: 100%;
+		box-sizing: border-box;
+		text-align: left;
+	}
+
+	.tab-sticker-item--select {
+		cursor: pointer;
+		min-height: 44px;
+	}
+
+	.tab-sticker-item--select.is-selected {
+		border-color: #2563eb;
+		box-shadow: inset 0 0 0 1px #2563eb;
+	}
+
+	.layer-item-actions {
+		display: inline-flex;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.layer-drag-handle {
+		flex-shrink: 0;
+		color: var(--fg-dim);
+		font-size: 0.9rem;
+		line-height: 1;
+		cursor: grab;
+		user-select: none;
+		padding: 2px 2px;
+	}
+
+	.layer-thumb {
+		width: 36px;
+		height: 36px;
+		object-fit: contain;
+		border-radius: 6px;
+		border: 1px solid var(--hairline);
+		background: var(--veil-edge);
+		flex-shrink: 0;
+	}
+
+	.layer-thumb--empty {
+		display: inline-block;
+	}
+
+	.layer-item-name {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.tab-sticker-item--select.is-dragging {
+		opacity: 0.55;
+	}
+
+	.layer-section {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.layer-adjust {
+		padding-top: 10px;
+		border-top: 1px solid var(--ring-line);
+	}
+
+	.layer-empty,
+	.layer-hint {
+		margin: 0;
+		font-size: 0.6rem;
+		color: var(--fg-dim);
+		line-height: 1.4;
 	}
 
 	.tab-mini-btn {

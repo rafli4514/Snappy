@@ -12,4 +12,4 @@
 	});
 </script>
 
-<EditScreen initialTab="filter" />
+<EditScreen mode="decorate" />

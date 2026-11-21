@@ -6,204 +6,111 @@
 
 	const dispatch = createEventDispatcher<{ zoom: void; retake: void }>();
 
-	let ratio = '4 / 3';
-
-	function handleImgLoad(e: Event): void {
-		const target = e.target as HTMLImageElement | null;
-		if (target?.naturalWidth && target?.naturalHeight) {
-			ratio = `${target.naturalWidth} / ${target.naturalHeight}`;
-		}
-	}
-
-	function handleActivate(): void {
+	function handleZoom(): void {
 		if (!photo) return;
 		dispatch('zoom');
-	}
-
-	function handleKey(e: KeyboardEvent): void {
-		if (!photo) return;
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			handleActivate();
-		}
 	}
 
 	function handleRetake(e: MouseEvent): void {
 		e.stopPropagation();
 		dispatch('retake');
 	}
-
-	function handleRetakeKey(e: KeyboardEvent): void {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			e.stopPropagation();
-			dispatch('retake');
-		}
-	}
-
-	function handleZoom(e: MouseEvent): void {
-		e.stopPropagation();
-		dispatch('zoom');
-	}
-
-	function handleZoomKey(e: KeyboardEvent): void {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			e.stopPropagation();
-			dispatch('zoom');
-		}
-	}
 </script>
 
-<div
-	class="photo-slot"
-	style="aspect-ratio: {ratio};"
-	role="button"
-	tabindex="0"
-	aria-label="Lihat foto {index + 1} lebih besar"
-	on:click={handleActivate}
-	on:keydown={handleKey}
->
-	{#if photo}
-		<img src={photo} alt="Hasil foto {index + 1}" on:load={handleImgLoad} />
+<article class="photo-card">
+	<button
+		type="button"
+		class="photo-hit"
+		disabled={!photo}
+		aria-label="Perbesar foto {index + 1}"
+		on:click={handleZoom}
+	>
+		{#if photo}
+			<img src={photo} alt="Hasil foto {index + 1}" draggable="false" />
+		{:else}
+			<span class="slot-empty">Foto {index + 1}</span>
+		{/if}
+	</button>
 
-		<div class="card-tools">
-			<button
-				type="button"
-				class="tool-btn font-mono"
-				aria-label="Perbesar foto {index + 1}"
-				on:click={handleZoom}
-				on:keydown={handleZoomKey}
-			>
-				<svg
-					viewBox="0 0 24 24"
-					width="13"
-					height="13"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="11" cy="11" r="7" />
-					<path d="m21 21-4.3-4.3" />
-				</svg>
-			</button>
-			<button
-				type="button"
-				class="tool-btn font-mono"
-				aria-label="Ambil ulang foto {index + 1}"
-				on:click={handleRetake}
-				on:keydown={handleRetakeKey}
-			>
-				<svg
-					viewBox="0 0 24 24"
-					width="12"
-					height="12"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M1 4v6h6" />
-					<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
-				</svg>
-				Ulang
-			</button>
-		</div>
-	{:else}
-		<span class="slot-empty font-mono">Foto {index + 1}</span>
-	{/if}
-</div>
+	<span class="photo-num" aria-hidden="true">{index + 1}</span>
+
+	<button
+		type="button"
+		class="retake-chip"
+		aria-label="Ambil ulang foto {index + 1}"
+		title="Ambil ulang"
+		on:click={handleRetake}
+	>
+		<svg
+			viewBox="0 0 24 24"
+			width="14"
+			height="14"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2.2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M1 4v6h6" />
+			<path d="M3.51 15a9 9 0 1 0 .49-5.5" />
+		</svg>
+	</button>
+</article>
 
 <style>
-	.photo-slot {
+	.photo-card {
 		position: relative;
 		width: 100%;
-		border-radius: 8px;
+		height: 100%;
+		min-height: 0;
+		border: 1px solid var(--card-border);
+		border-radius: 14px;
 		overflow: hidden;
-		background: var(--veil-edge);
+		background: var(--media-bg);
+		transition:
+			border-color 160ms ease,
+			box-shadow 180ms ease,
+			transform 160ms ease;
+	}
+
+	.photo-card:hover {
+		border-color: var(--card-border-hover);
+		box-shadow: var(--card-shadow);
+		transform: translateY(-2px);
+	}
+
+	.photo-hit {
+		display: block;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: none;
+		background: transparent;
 		cursor: pointer;
-		outline: 2px solid transparent;
-		outline-offset: 2px;
-		transition: opacity 160ms ease;
+		outline: none;
 	}
 
-	.photo-slot:hover {
-		opacity: 0.92;
+	.photo-hit:disabled {
+		cursor: default;
 	}
 
-	.photo-slot:active {
-		opacity: 0.85;
-	}
-
-	.photo-slot:focus-visible {
+	.photo-hit:focus-visible {
 		outline: 2.5px solid var(--focus);
-		outline-offset: 3px;
+		outline-offset: -3px;
+		border-radius: 14px;
 	}
 
-	.photo-slot img {
+	.photo-hit img {
 		display: block;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		transition: transform 240ms ease;
 	}
 
-	.card-tools {
-		position: absolute;
-		right: 8px;
-		bottom: 8px;
-		display: flex;
-		gap: 6px;
-	}
-
-	.tool-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 5px;
-		min-width: 36px;
-		min-height: 36px;
-		padding: 0 10px;
-		border: 1px solid rgba(255, 255, 255, 0.25);
-		border-radius: 999px;
-		background: rgba(11, 10, 9, 0.6);
-		color: #fff;
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.15em;
-		text-transform: uppercase;
-		cursor: pointer;
-		opacity: 0;
-		transform: translateY(4px);
-		transition:
-			opacity 180ms ease,
-			transform 180ms ease,
-			background-color 160ms ease;
-	}
-
-	.photo-slot:hover .tool-btn,
-	.photo-slot:focus-within .tool-btn {
-		opacity: 1;
-		transform: translateY(0);
-	}
-
-	.tool-btn:hover {
-		background: rgba(11, 10, 9, 0.8);
-	}
-
-	.tool-btn:active {
-		transform: scale(0.96);
-	}
-
-	.tool-btn:focus-visible {
-		outline: 2.5px solid var(--focus);
-		outline-offset: 3px;
-		opacity: 1;
-		transform: translateY(0);
+	.photo-card:hover .photo-hit img {
+		transform: scale(1.02);
 	}
 
 	.slot-empty {
@@ -212,22 +119,72 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 0.8rem;
-		color: var(--fg-dim);
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--muted-ink);
+	}
+
+	.photo-num {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		min-width: 26px;
+		height: 26px;
+		padding: 0 7px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.56);
+		color: #ffffff;
+		font-size: 0.72rem;
+		font-weight: 700;
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		pointer-events: none;
+	}
+
+	.retake-chip {
+		position: absolute;
+		right: 10px;
+		bottom: 10px;
+		width: 34px;
+		height: 34px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid rgba(255, 255, 255, 0.24);
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.58);
+		color: #ffffff;
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		cursor: pointer;
+		outline: none;
+		transition:
+			background-color 150ms ease,
+			transform 140ms ease;
+	}
+
+	.retake-chip:hover {
+		background: rgba(15, 23, 42, 0.84);
+		transform: scale(1.06);
+	}
+
+	.retake-chip:active {
+		transform: scale(0.95);
+	}
+
+	.retake-chip:focus-visible {
+		outline: 2.5px solid var(--focus);
+		outline-offset: 2px;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.photo-slot,
-		.tool-btn {
+		.photo-card,
+		.photo-hit img,
+		.retake-chip {
 			transition: none;
-		}
-	}
-
-	/* Touch devices: always show the controls */
-	@media (hover: none) {
-		.tool-btn {
-			opacity: 1;
-			transform: translateY(0);
 		}
 	}
 </style>

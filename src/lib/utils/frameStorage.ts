@@ -86,13 +86,12 @@ export function frameToTemplate(frame: PhotoFrame): CustomTemplate {
 			scale: slot.scale ?? 1,
 			offsetX: slot.offsetX ?? 0,
 			offsetY: (slot.offsetY ?? 0) + focalOffsetY
-		})),
-		overlays: []
+		}))
 	};
 }
 
 /** Ukuran canvas yang dibutuhkan untuk jumlah slot tertentu. */
-export interface FrameSizeGuide {
+interface FrameSizeGuide {
 	slotCount: number;
 	width: number;
 	height: number;

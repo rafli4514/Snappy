@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		detectFrameSlots,
 		boxesToSlots,
@@ -27,6 +28,13 @@
 	let presetOn = $state<Record<string, boolean>>({});
 
 	onMount(async () => {
+		// Dashboard menjadi titik masuk admin; katalog standar dipindah ke /dashboard/assets/frame-sizes.
+		if (
+			typeof window !== 'undefined' &&
+			!new URLSearchParams(window.location.search).has('direct')
+		) {
+			void goto('/dashboard/assets/frame-sizes', { replace: true });
+		}
 		frames = await listFrames();
 		loading = false;
 		presetOn = readPresets();

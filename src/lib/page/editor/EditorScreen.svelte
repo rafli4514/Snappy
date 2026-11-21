@@ -20,13 +20,10 @@
 	$: photos = $stripPhotos;
 	$: photoCount = $session.photoCount;
 	$: activeFrame = $session.activeFrame;
-	$: customTemplateData = $session.customTemplateData;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
 
-	$: activeTemplate = activeFrame
-		? frameToTemplate(activeFrame)
-		: customTemplateData || $session.selectedTemplate;
+	$: activeTemplate = activeFrame ? frameToTemplate(activeFrame) : $session.selectedTemplate;
 	$: product = getProductForCount(photoCount, $session.formatId) || PRODUK[4];
 
 	// ── Panel kanan: hanya template admin (frame tersimpan) ──
@@ -466,14 +463,12 @@
 									type="button"
 									class="template-card"
 									class:is-selected={$session.activeFrame === null &&
-										$session.customTemplateData === null &&
 										$session.selectedTemplate === 'classic'}
 									on:click={() => {
 										setActiveFrame(null);
 										selectBuiltinTemplate('classic');
 									}}
 									aria-pressed={$session.activeFrame === null &&
-									$session.customTemplateData === null &&
 									$session.selectedTemplate === 'classic'
 										? 'true'
 										: 'false'}
@@ -481,7 +476,7 @@
 								>
 									<span class="template-thumb design-thumb--builtin">
 										<span>Classic</span>
-										{#if $session.activeFrame === null && $session.customTemplateData === null && $session.selectedTemplate === 'classic'}
+										{#if $session.activeFrame === null && $session.selectedTemplate === 'classic'}
 											<span class="selected-mark" aria-hidden="true">✓</span>
 										{/if}
 									</span>

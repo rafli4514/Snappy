@@ -10,6 +10,15 @@
 import { json } from '@sveltejs/kit';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { enqueue } from '#lib/server/queueStore';
+
+function logPrint(status: 'done' | 'failed' | 'skipped', detail: string, title = 'Print'): void {
+	try {
+		enqueue({ type: 'print', status, title, detail, source: 'api/print' });
+	} catch {
+		// logging must not affect printing
+	}
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +50,7 @@ export async function POST({ request }: { request: Request }) {
 		} = body;
 
 		if (!printerName) {
+			logPrint('failed', 'Tidak ada printer dipilih.');
 			return json(
 				{ success: false, error: 'print_queue: No printer selected in settings!' },
 				{ status: 400 }
@@ -71,16 +81,24 @@ export async function POST({ request }: { request: Request }) {
 			);
 
 			if (stderr) {
+				logPrint('failed', stderr.trim().slice(0, 400), `Print gagal (${printerName})`);
 				return json({ success: false, error: stderr.trim() }, { status: 500 });
 			}
 
+			logPrint(
+				'done',
+				`Printer: ${printerName} · copies: ${copies} · ${splitMode}`,
+				`Print terkirim (${printerName})`
+			);
 			return json({ success: true, output: stdout.trim() });
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
+			logPrint('failed', msg.slice(0, 400), `Print gagal (${printerName})`);
 			return json({ success: false, error: `PowerShell error: ${msg}` }, { status: 500 });
 		}
 	} catch (err: unknown) {
 		const msg = err instanceof Error ? err.message : 'Unknown error';
+		logPrint('failed', msg.slice(0, 400));
 		return json({ success: false, error: msg }, { status: 500 });
 	}
 }

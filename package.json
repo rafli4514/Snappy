@@ -39,6 +39,7 @@
 		"@lucide/svelte": "^1.61.0",
 		"@tabler/icons": "^3.50.0",
 		"gifenc": "^1.0.3",
+		"mp4-muxer": "^5.2.2",
 		"qrcode": "^1.5.4"
 	}
 }
