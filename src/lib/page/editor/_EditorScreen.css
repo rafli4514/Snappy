@@ -58,24 +58,6 @@
 	--card-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
 }
 
-/* ── Latar bingkai dari aset bg-frame.png ── */
-.bg-frame {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	object-fit: fill;
-	pointer-events: none;
-	user-select: none;
-	z-index: 0;
-	filter: invert(1) brightness(0.95);
-	transition: filter 220ms ease;
-}
-
-.theme-light .bg-frame {
-	filter: none;
-}
-
 /* ── Area isi di dalam bingkai ── */
 .frame-inner {
 	position: relative;
@@ -85,7 +67,7 @@
 	width: 100%;
 	max-width: 1560px;
 	margin: 0 auto;
-	padding: clamp(20px, 3dvh, 36px) clamp(26px, 3.6vw, 56px) clamp(16px, 2.4dvh, 28px);
+	padding: clamp(28px, 3.4dvh, 40px) clamp(34px, 4vw, 60px) clamp(26px, 3dvh, 36px);
 	display: flex;
 	flex-direction: column;
 	gap: clamp(10px, 1.4dvh, 16px);
@@ -349,7 +331,7 @@
 }
 
 /* ── 2. KOLOM TENGAH: Pratinjau Kanvas ── */
-.preview-stage {
+.editor-screen .preview-stage {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -394,12 +376,15 @@
 }
 
 /* Pill kontrol melayang di bawah kanvas */
-.canvas-toolbar {
+.editor-screen .canvas-toolbar {
 	position: absolute;
 	left: 50%;
 	bottom: 14px;
+	top: auto;
+	right: auto;
 	transform: translateX(-50%);
 	display: inline-flex;
+	flex-direction: row;
 	align-items: center;
 	gap: 2px;
 	padding: 4px;
@@ -412,7 +397,7 @@
 	z-index: 10;
 }
 
-.tool-btn {
+.editor-screen .tool-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -433,38 +418,38 @@
 		background-color 140ms ease;
 }
 
-.tool-btn:hover:not(:disabled) {
+.editor-screen .tool-btn:hover:not(:disabled) {
 	color: var(--title-ink);
 	background: var(--divider-bg);
 }
 
-.tool-btn:disabled {
+.editor-screen .tool-btn:disabled {
 	opacity: 0.32;
 	cursor: default;
 }
 
-.tool-btn:focus-visible {
+.editor-screen .tool-btn:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
-.tool-btn.is-active {
+.editor-screen .tool-btn.is-active {
 	background: var(--title-ink);
 	color: var(--page-bg);
 }
 
-.tool-btn.is-active:hover {
+.editor-screen .tool-btn.is-active:hover {
 	background: var(--title-ink);
 	color: var(--page-bg);
 }
 
-.tool-level {
+.editor-screen .tool-level {
 	min-width: 52px;
 	font-size: 0.72rem;
 	color: var(--title-ink);
 }
 
-.tool-sep {
+.editor-screen .tool-sep {
 	width: 1px;
 	height: 18px;
 	background: var(--card-border);
@@ -919,7 +904,6 @@
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
 	.editor-screen,
-	.bg-frame,
 	.back-pill,
 	.editor-stage,
 	.photo-item,
@@ -949,10 +933,6 @@
 		min-height: 100dvh;
 		overflow-x: hidden;
 		overflow-y: auto;
-	}
-
-	.bg-frame {
-		position: fixed;
 	}
 
 	.frame-inner {

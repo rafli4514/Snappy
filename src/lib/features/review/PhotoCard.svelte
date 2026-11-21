@@ -62,10 +62,11 @@
 	.photo-card {
 		position: relative;
 		width: 100%;
-		height: 100%;
+		aspect-ratio: 4 / 3;
+		max-height: 100%;
 		min-height: 0;
 		border: 1px solid var(--card-border);
-		border-radius: 14px;
+		border-radius: 16px;
 		overflow: hidden;
 		background: var(--media-bg);
 		transition:
@@ -81,6 +82,8 @@
 	}
 
 	.photo-hit {
+		position: absolute;
+		inset: 0;
 		display: block;
 		width: 100%;
 		height: 100%;
@@ -126,18 +129,18 @@
 
 	.photo-num {
 		position: absolute;
-		top: 10px;
-		left: 10px;
-		min-width: 26px;
-		height: 26px;
-		padding: 0 7px;
+		top: 12px;
+		left: 12px;
+		min-width: 28px;
+		height: 28px;
+		padding: 0 8px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		border-radius: 999px;
 		background: rgba(15, 23, 42, 0.56);
 		color: #ffffff;
-		font-size: 0.72rem;
+		font-size: 0.76rem;
 		font-weight: 700;
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
@@ -146,10 +149,10 @@
 
 	.retake-chip {
 		position: absolute;
-		right: 10px;
-		bottom: 10px;
-		width: 34px;
-		height: 34px;
+		right: 12px;
+		bottom: 12px;
+		width: 38px;
+		height: 38px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;

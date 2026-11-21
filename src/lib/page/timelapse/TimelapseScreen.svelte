@@ -7,6 +7,7 @@
 		type TimelapseTransition
 	} from '#lib/utils/timelapse';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 	import type { TimelapseMeta, TimelapseSpeedMul } from '#lib/types';
 
 	const SPEED_OPTIONS: { v: TimelapseSpeedMul; l: string }[] = [
@@ -181,13 +182,7 @@
 	class:theme-light={theme === 'light'}
 	aria-label="Timelapse"
 >
-	<img
-		class="bg-frame"
-		src="/strip-select/bg-frame.png"
-		alt=""
-		aria-hidden="true"
-		draggable="false"
-	/>
+	<StudioFrame />
 
 	<div class="frame-inner">
 		<header class="top-bar">

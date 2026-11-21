@@ -24,6 +24,7 @@
 	import { findPhotoFilter, getFilterGroups } from '#lib/data/filters';
 	import { customFiltersStore, customStickersStore } from '#lib/services/customAssets';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 	import type { PhotoTransform, StickerLayer } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -717,13 +718,7 @@
 	class:theme-light={theme === 'light'}
 	aria-label="Edit dan dekorasi strip"
 >
-	<img
-		class="bg-frame"
-		src="/strip-select/bg-frame.png"
-		alt=""
-		aria-hidden="true"
-		draggable="false"
-	/>
+	<StudioFrame />
 
 	<div class="frame-inner">
 		<header class="top-bar">
@@ -1044,39 +1039,43 @@
 					<button
 						type="button"
 						class="tool-btn"
-						class:is-active={showSlotNumbers}
-						on:click={() => (showSlotNumbers = !showSlotNumbers)}
-						aria-pressed={showSlotNumbers}
-						aria-label="Tampilkan nomor slot di kanvas"
+						on:click={zoomIn}
+						aria-label="Perbesar kanvas"
+						title="Perbesar"
+						disabled={canvasZoom >= ZOOM_MAX}
 					>
-						123
-					</button>
-					<span class="tool-sep" aria-hidden="true"></span>
-					<button
-						type="button"
-						class="tool-btn"
-						on:click={zoomOut}
-						aria-label="Perkecil kanvas"
-						disabled={canvasZoom <= ZOOM_MIN}
-					>
-						−
+						+
 					</button>
 					<button
 						type="button"
 						class="tool-btn tool-level"
 						on:click={zoomFit}
 						aria-label="Kembalikan kanvas ke ukuran pas"
+						title="Ukuran pas"
 					>
 						{Math.round(canvasZoom * 100)}%
 					</button>
 					<button
 						type="button"
 						class="tool-btn"
-						on:click={zoomIn}
-						aria-label="Perbesar kanvas"
-						disabled={canvasZoom >= ZOOM_MAX}
+						on:click={zoomOut}
+						aria-label="Perkecil kanvas"
+						title="Perkecil"
+						disabled={canvasZoom <= ZOOM_MIN}
 					>
-						+
+						−
+					</button>
+					<span class="tool-sep" aria-hidden="true"></span>
+					<button
+						type="button"
+						class="tool-btn"
+						class:is-active={showSlotNumbers}
+						on:click={() => (showSlotNumbers = !showSlotNumbers)}
+						aria-pressed={showSlotNumbers}
+						aria-label="Tampilkan nomor slot di kanvas"
+						title="Nomor slot"
+					>
+						123
 					</button>
 				</div>
 			</main>

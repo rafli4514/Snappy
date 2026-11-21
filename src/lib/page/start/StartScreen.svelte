@@ -2,6 +2,10 @@
 	import { goTo, session } from '#lib/stores/session';
 	import StripBands from '#lib/features/strip-select/StripBands.svelte';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import SplashLoader, { hasSplashPlayed } from '#lib/components/ui/SplashLoader.svelte';
+
+	type IntroStage = 'waiting' | 'revealing' | 'skipped';
+	let introStage: IntroStage = hasSplashPlayed() ? 'skipped' : 'waiting';
 
 	/**
 	 * Reactive state — current kiosk theme.
@@ -103,8 +107,13 @@
 	on:pointerleave={handlePointerLeave}
 />
 
+<SplashLoader on:reveal={() => (introStage = 'revealing')} />
+
 <section
-	class="start-screen screen-enter kiosk-scope"
+	class="start-screen kiosk-scope"
+	class:screen-enter={introStage === 'skipped'}
+	class:is-intro-waiting={introStage === 'waiting'}
+	class:is-intro-revealing={introStage === 'revealing'}
 	class:theme-light={theme === 'light'}
 	aria-label="DISTUDIO Photobooth"
 >
@@ -150,18 +159,7 @@
 			<p class="serif-line font-display">to capture your memory</p>
 		</header>
 
-		<div
-			bind:this={clusterEl}
-			class="tumpuk-foto"
-			class:is-scattered={isScattered}
-			on:pointerenter={() => (isHovered = true)}
-			on:pointerleave={() => (isHovered = false)}
-			on:click={handleStart}
-			on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleStart()}
-			role="button"
-			tabindex="0"
-			aria-label="Mulai photobooth"
-		>
+		<div bind:this={clusterEl} class="tumpuk-foto" class:is-scattered={isScattered}>
 			<div class="polaroid-group" aria-hidden="true">
 				<img class="polaroid p1" src="/landingPage/1.svg" alt="" />
 				<img class="polaroid p2" src="/landingPage/2.svg" alt="" />
@@ -174,6 +172,48 @@
 				<img class="polaroid p7" src="/landingPage/7.svg" alt="" />
 				<img class="polaroid p10" src="/landingPage/5.svg" alt="" />
 			</div>
+		</div>
+
+		<div class="cta-dock">
+			<button
+				type="button"
+				class="start-cta"
+				on:click={handleStart}
+				aria-label="Mulai photobooth, pilih tata letak strip"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					width="18"
+					height="18"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path
+						d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+					/>
+					<circle cx="12" cy="13" r="4" />
+				</svg>
+				<span>MULAI</span>
+				<svg
+					class="cta-arrow"
+					viewBox="0 0 24 24"
+					width="16"
+					height="16"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M5 12h14" />
+					<path d="M13 5l7 7-7 7" />
+				</svg>
+			</button>
 		</div>
 	</div>
 </section>

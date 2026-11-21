@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { session, goTo, setFormat, setPhotoCount } from '#lib/stores/session';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 
 	interface StripOption {
 		id: string;
@@ -124,13 +125,7 @@
 	class:theme-light={$session.theme === 'light'}
 	aria-label="Tata letak strip foto"
 >
-	<img
-		class="bg-frame"
-		src="/strip-select/bg-frame.png"
-		alt=""
-		aria-hidden="true"
-		draggable="false"
-	/>
+	<StudioFrame />
 
 	<div class="frame-inner">
 		<header class="top-bar">

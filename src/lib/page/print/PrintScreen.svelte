@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import type { TransitionConfig } from 'svelte/transition';
 	import { session, goTo, resetSession, stripPhotos } from '#lib/stores/session';
 	import { getProductForCount, renderExportCanvas } from '#lib/utils/canvas';
 	import { frameToTemplate } from '#lib/utils/frameStorage';
@@ -14,11 +16,23 @@
 		generateId
 	} from '#lib/services/gallery';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 
 	type PreviewTab = 'strip' | 'photos' | 'timelapse';
 
+	const AUTO_SLIDE_MS = 3000;
+
 	let previewCanvas: HTMLCanvasElement;
 	let activeTab: PreviewTab = 'strip';
+
+	// State slide untuk tab Foto Sesi
+	let activePhotoIndex = 0;
+	let slideDir: 1 | -1 = 1;
+	let photoAspect = 4 / 3;
+	let slideProgressKey = 0;
+	let slideTimer: ReturnType<typeof setInterval> | null = null;
+	let swipeStartX: number | null = null;
+	let swipeStartY: number | null = null;
 
 	let isPrinting = false;
 	let isDownloading = false;
@@ -59,6 +73,125 @@
 	$: videoUrl = $session.timelapseVideoDataUrl;
 	$: gifUrl = $session.timelapseDataUrl;
 
+	$: if (photos.length === 0) {
+		activePhotoIndex = 0;
+	} else if (activePhotoIndex >= photos.length) {
+		activePhotoIndex = photos.length - 1;
+	}
+
+	$: activeSlidePhoto = photos[activePhotoIndex] ?? null;
+	$: shouldAutoSlide = activeTab === 'photos' && photos.length > 1;
+	$: syncSlideTimer(shouldAutoSlide);
+
+	function stopSlideTimer(): void {
+		if (slideTimer) {
+			clearInterval(slideTimer);
+			slideTimer = null;
+		}
+	}
+
+	function startSlideTimer(): void {
+		stopSlideTimer();
+		if (typeof window === 'undefined' || activeTab !== 'photos' || photos.length <= 1) return;
+		slideTimer = setInterval(() => {
+			if (swipeStartX !== null) return;
+			slideDir = 1;
+			activePhotoIndex = (activePhotoIndex + 1) % photos.length;
+			slideProgressKey += 1;
+		}, AUTO_SLIDE_MS);
+	}
+
+	function syncSlideTimer(running: boolean): void {
+		if (running) {
+			slideProgressKey += 1;
+			startSlideTimer();
+		} else {
+			stopSlideTimer();
+		}
+	}
+
+	function handleSlideImgLoad(e: Event): void {
+		const img = e.currentTarget as HTMLImageElement;
+		if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+			photoAspect = img.naturalWidth / img.naturalHeight;
+		}
+	}
+
+	function slidePhoto(
+		_node: Element,
+		{ dir, kind }: { dir: 1 | -1; kind: 'in' | 'out' }
+	): TransitionConfig {
+		const reduced =
+			typeof window !== 'undefined' &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		if (reduced) {
+			return { duration: 0 };
+		}
+		return {
+			duration: kind === 'in' ? 320 : 280,
+			easing: cubicOut,
+			css: (t, u) => {
+				const shift = kind === 'in' ? dir * u * 26 : -dir * u * 26;
+				const scale = 0.96 + 0.04 * t;
+				return `transform: translate3d(${shift}%, 0, 0) scale(${scale}); opacity: ${t};`;
+			}
+		};
+	}
+
+	function selectSlidePhoto(index: number): void {
+		if (index < 0 || index >= photos.length || index === activePhotoIndex) return;
+		slideDir = index > activePhotoIndex ? 1 : -1;
+		activePhotoIndex = index;
+		slideProgressKey += 1;
+		startSlideTimer();
+	}
+
+	function prevSlidePhoto(): void {
+		if (photos.length <= 1) return;
+		slideDir = -1;
+		activePhotoIndex = (activePhotoIndex - 1 + photos.length) % photos.length;
+		slideProgressKey += 1;
+		startSlideTimer();
+	}
+
+	function nextSlidePhoto(): void {
+		if (photos.length <= 1) return;
+		slideDir = 1;
+		activePhotoIndex = (activePhotoIndex + 1) % photos.length;
+		slideProgressKey += 1;
+		startSlideTimer();
+	}
+
+	function handleSlidePointerDown(e: PointerEvent): void {
+		if (photos.length <= 1 || e.button !== 0) return;
+		swipeStartX = e.clientX;
+		swipeStartY = e.clientY;
+	}
+
+	function handleSlidePointerUp(e: PointerEvent): void {
+		if (swipeStartX === null || swipeStartY === null) return;
+		const dx = e.clientX - swipeStartX;
+		const dy = e.clientY - swipeStartY;
+		swipeStartX = null;
+		swipeStartY = null;
+
+		if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+			if (dx < 0) nextSlidePhoto();
+			else prevSlidePhoto();
+		}
+	}
+
+	function handleWindowKeyDown(e: KeyboardEvent): void {
+		if (activeTab !== 'photos' || photos.length <= 1) return;
+		if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			prevSlidePhoto();
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			nextSlidePhoto();
+		}
+	}
+
 	onMount(async () => {
 		void generateGalleryQR();
 		await drawSheetPreview();
@@ -67,6 +200,7 @@
 	onDestroy(() => {
 		if (copyTimer) clearTimeout(copyTimer);
 		if (downloadTimer) clearTimeout(downloadTimer);
+		stopSlideTimer();
 	});
 
 	async function drawSheetPreview(): Promise<void> {
@@ -212,18 +346,14 @@
 	}
 </script>
 
+<svelte:window on:keydown={handleWindowKeyDown} />
+
 <section
 	class="print-screen screen-enter kiosk-scope"
 	class:theme-light={theme === 'light'}
 	aria-label="Cetak dan bagikan"
 >
-	<img
-		class="bg-frame"
-		src="/strip-select/bg-frame.png"
-		alt=""
-		aria-hidden="true"
-		draggable="false"
-	/>
+	<StudioFrame />
 
 	<div class="frame-inner">
 		<header class="top-bar">
@@ -354,18 +484,123 @@
 						></canvas>
 					</div>
 
-					<!-- Tab 2: Foto Sesi -->
+					<!-- Tab 2: Foto Sesi (Spotlight Slide) -->
 					{#if activeTab === 'photos'}
-						<div class="photos-view" role="tabpanel">
-							{#if photos.length}
-								<ul class="photo-grid" data-count={photos.length}>
-									{#each photos as photo, i (i)}
-										<li class="photo-tile">
-											<img src={photo} alt="Foto {i + 1} pada strip" draggable="false" />
-											<span class="photo-num" aria-hidden="true">{i + 1}</span>
-										</li>
-									{/each}
-								</ul>
+						<div class="photos-spotlight" role="tabpanel">
+							{#if photos.length && activeSlidePhoto}
+								<div class="slide-stage">
+									{#if photos.length > 1}
+										<button
+											type="button"
+											class="slide-arrow is-prev"
+											on:click={prevSlidePhoto}
+											aria-label="Foto sebelumnya"
+										>
+											<svg
+												viewBox="0 0 24 24"
+												width="18"
+												height="18"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.4"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+											>
+												<path d="M15 18l-6-6 6-6" />
+											</svg>
+										</button>
+									{/if}
+
+									<div class="slide-slot">
+										<div
+											class="slide-card"
+											style="--photo-ar: {photoAspect};"
+											role="region"
+											aria-roledescription="carousel"
+											aria-label="Slide foto sesi"
+											on:pointerdown={handleSlidePointerDown}
+											on:pointerup={handleSlidePointerUp}
+											on:pointercancel={() => {
+												swipeStartX = null;
+												swipeStartY = null;
+											}}
+										>
+											{#key activePhotoIndex}
+												<div
+													class="slide-frame"
+													in:slidePhoto={{ dir: slideDir, kind: 'in' }}
+													out:slidePhoto={{ dir: slideDir, kind: 'out' }}
+												>
+													<img
+														src={activeSlidePhoto}
+														alt="Foto {activePhotoIndex + 1} pada strip"
+														class="slide-img"
+														on:load={handleSlideImgLoad}
+														draggable="false"
+													/>
+												</div>
+											{/key}
+
+											<span class="slide-counter" aria-live="polite">
+												Foto {activePhotoIndex + 1} / {photos.length}
+											</span>
+
+											{#if photos.length > 1}
+												<div class="slide-auto-bar" aria-hidden="true">
+													{#key slideProgressKey}
+														<span
+															class="slide-auto-fill"
+															style="animation-duration: {AUTO_SLIDE_MS}ms;"
+														></span>
+													{/key}
+												</div>
+											{/if}
+										</div>
+									</div>
+
+									{#if photos.length > 1}
+										<button
+											type="button"
+											class="slide-arrow is-next"
+											on:click={nextSlidePhoto}
+											aria-label="Foto berikutnya"
+										>
+											<svg
+												viewBox="0 0 24 24"
+												width="18"
+												height="18"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.4"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+											>
+												<path d="M9 18l6-6-6-6" />
+											</svg>
+										</button>
+									{/if}
+								</div>
+
+								{#if photos.length > 1}
+									<div class="slide-thumbs" role="tablist" aria-label="Pilih foto sesi">
+										{#each photos as photo, i (i)}
+											<button
+												type="button"
+												role="tab"
+												class="slide-thumb"
+												class:is-active={i === activePhotoIndex}
+												aria-selected={i === activePhotoIndex}
+												aria-label="Lihat foto {i + 1}"
+												on:click={() => selectSlidePhoto(i)}
+											>
+												<img src={photo} alt="" draggable="false" />
+												<span class="slide-thumb-num" aria-hidden="true">{i + 1}</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
 							{:else}
 								<p class="empty-note">Belum ada foto di sesi ini.</p>
 							{/if}

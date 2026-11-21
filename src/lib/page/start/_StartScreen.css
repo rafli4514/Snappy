@@ -136,26 +136,150 @@
 	transition: color 220ms ease;
 }
 
-/* ── Kumpulan foto acak dengan tombol MULAI di tengahnya ── */
+/* ── Kumpulan foto acak ── */
 .tumpuk-foto {
 	position: relative;
 	width: min(94vw, 1020px);
-	height: clamp(340px, 46vh, 500px);
-	margin-top: clamp(18px, 4.5vh, 52px);
+	height: clamp(280px, 39dvh, 420px);
+	margin-top: clamp(6px, 1.8dvh, 22px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	cursor: pointer;
 	z-index: 1;
 	--scatter-scale: 1;
 	--cluster-scale: 1;
-	outline: none;
 }
 
-.tumpuk-foto:focus-visible {
-	outline: 2px solid var(--fg);
-	outline-offset: 6px;
-	border-radius: 20px;
+/* ── Tombol utama MULAI FOTO di tengah bawah ── */
+.start-screen .cta-dock {
+	position: relative;
+	z-index: 30;
+	display: flex;
+	justify-content: center;
+	margin-top: clamp(8px, 1.8dvh, 20px);
+	padding-bottom: clamp(18px, 3.2dvh, 36px);
+}
+
+.start-screen .start-cta {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 11px;
+	min-height: clamp(52px, 6.6dvh, 62px);
+	padding: 0 clamp(28px, 3.4vw, 42px);
+	border: 1.5px solid var(--halo);
+	border-radius: 999px;
+	background: var(--fg);
+	color: var(--bg);
+	font-family: var(--font-body);
+	font-size: clamp(0.86rem, 1.05vw, 1rem);
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	cursor: pointer;
+	outline: none;
+	box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+	transition:
+		transform 200ms cubic-bezier(0.34, 1.4, 0.64, 1),
+		box-shadow 200ms ease,
+		background-color 200ms ease,
+		color 200ms ease;
+}
+
+.start-screen.theme-light .start-cta {
+	box-shadow: 0 14px 30px rgba(28, 25, 23, 0.18);
+}
+
+.start-screen .start-cta:hover {
+	transform: translateY(-2px) scale(1.03);
+	box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+}
+
+.start-screen.theme-light .start-cta:hover {
+	box-shadow: 0 18px 34px rgba(28, 25, 23, 0.24);
+}
+
+.start-screen .start-cta:active {
+	transform: translateY(0) scale(0.98);
+}
+
+.start-screen .start-cta:focus-visible {
+	outline: 3px solid var(--focus);
+	outline-offset: 5px;
+}
+
+.start-screen .start-cta .cta-arrow {
+	transition: transform 200ms ease;
+}
+
+.start-screen .start-cta:hover .cta-arrow {
+	transform: translateX(4px);
+}
+
+/* ── Transisi masuk terkoordinasi dari SplashLoader ke Landing Page ── */
+.start-screen.is-intro-waiting .corner-decorations,
+.start-screen.is-intro-waiting .brand-stack,
+.start-screen.is-intro-waiting .tumpuk-foto,
+.start-screen.is-intro-waiting .cta-dock {
+	opacity: 0;
+}
+
+.start-screen.is-intro-waiting .brand-stack {
+	transform: translateY(24px);
+}
+
+.start-screen.is-intro-waiting .tumpuk-foto {
+	transform: translateY(32px) scale(0.92);
+}
+
+.start-screen.is-intro-waiting .cta-dock {
+	transform: translateY(22px);
+}
+
+.start-screen.is-intro-revealing .corner-decorations {
+	animation: introFadeIn 780ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+
+.start-screen.is-intro-revealing .brand-stack {
+	animation: introRise 720ms cubic-bezier(0.22, 1, 0.36, 1) 140ms both;
+}
+
+.start-screen.is-intro-revealing .tumpuk-foto {
+	animation: introBloom 820ms cubic-bezier(0.22, 1, 0.36, 1) 280ms both;
+}
+
+.start-screen.is-intro-revealing .cta-dock {
+	animation: introRise 660ms cubic-bezier(0.22, 1, 0.36, 1) 460ms both;
+}
+
+@keyframes introFadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes introRise {
+	from {
+		opacity: 0;
+		transform: translateY(24px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes introBloom {
+	from {
+		opacity: 0;
+		transform: translateY(32px) scale(0.92);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
 }
 
 .polaroid-group {
@@ -325,8 +449,17 @@
 	.logo-mark,
 	.sub-brand,
 	.serif-line,
-	.polaroid {
+	.polaroid,
+	.start-screen .start-cta,
+	.start-screen .start-cta .cta-arrow {
 		transition: none;
+	}
+
+	.start-screen.is-intro-revealing .corner-decorations,
+	.start-screen.is-intro-revealing .brand-stack,
+	.start-screen.is-intro-revealing .tumpuk-foto,
+	.start-screen.is-intro-revealing .cta-dock {
+		animation: none;
 	}
 }
 

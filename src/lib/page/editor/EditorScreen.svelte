@@ -13,6 +13,7 @@
 	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
 	import { formatById } from '#lib/data/standardFormats';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 	import type { PhotoFrame } from '#lib/types';
 
 	let canvas: HTMLCanvasElement;
@@ -196,13 +197,7 @@
 	class:theme-light={theme === 'light'}
 	aria-label="Desain Strip Foto"
 >
-	<img
-		class="bg-frame"
-		src="/strip-select/bg-frame.png"
-		alt=""
-		aria-hidden="true"
-		draggable="false"
-	/>
+	<StudioFrame />
 
 	<div class="frame-inner">
 		<header class="top-bar">

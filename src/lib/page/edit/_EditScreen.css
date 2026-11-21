@@ -58,24 +58,6 @@
 	--card-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
 }
 
-/* ── Latar bingkai dari aset bg-frame.png ── */
-.bg-frame {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	object-fit: fill;
-	pointer-events: none;
-	user-select: none;
-	z-index: 0;
-	filter: invert(1) brightness(0.95);
-	transition: filter 220ms ease;
-}
-
-.theme-light .bg-frame {
-	filter: none;
-}
-
 /* ── Area isi di dalam bingkai ── */
 .frame-inner {
 	position: relative;
@@ -85,7 +67,7 @@
 	width: 100%;
 	max-width: 1560px;
 	margin: 0 auto;
-	padding: clamp(20px, 3dvh, 36px) clamp(26px, 3.6vw, 56px) clamp(16px, 2.4dvh, 28px);
+	padding: clamp(28px, 3.4dvh, 40px) clamp(34px, 4vw, 60px) clamp(26px, 3dvh, 36px);
 	display: flex;
 	flex-direction: column;
 	gap: clamp(10px, 1.4dvh, 16px);
@@ -393,7 +375,7 @@
 }
 
 /* ── 2. KOLOM TENGAH: Pratinjau Kanvas + Guide Canva ── */
-.preview-stage {
+.edit-screen .preview-stage {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -403,7 +385,7 @@
 	border-radius: 16px;
 	background: var(--stage-bg);
 	overflow: hidden;
-	padding: 24px 28px 72px;
+	padding: 20px 72px 20px 24px;
 }
 
 .canvas-viewport {
@@ -644,16 +626,21 @@
 	pointer-events: none;
 }
 
-/* Toolbar melayang kanvas */
-.canvas-toolbar {
+/* Toolbar melayang vertikal di sisi kanan tengah kanvas */
+.edit-screen .canvas-toolbar {
 	position: absolute;
-	left: 50%;
-	bottom: 14px;
-	transform: translateX(-50%);
+	top: 50%;
+	right: 14px;
+	left: auto;
+	bottom: auto;
+	transform: translateY(-50%);
 	display: inline-flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 2px;
-	padding: 4px;
+	gap: 4px;
+	padding: 5px;
+	width: auto;
+	height: auto;
 	border: 1px solid var(--card-border);
 	border-radius: 999px;
 	background: var(--fab-bg);
@@ -663,19 +650,20 @@
 	z-index: 10;
 }
 
-.tool-btn {
+.edit-screen .tool-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 36px;
+	min-width: 0;
+	width: 36px;
 	height: 36px;
-	padding: 0 10px;
+	padding: 0;
 	border: none;
 	border-radius: 999px;
 	background: transparent;
 	color: var(--muted-ink);
 	font-family: var(--font-body);
-	font-size: 0.78rem;
+	font-size: 0.82rem;
 	font-weight: 700;
 	cursor: pointer;
 	outline: none;
@@ -684,42 +672,45 @@
 		background-color 140ms ease;
 }
 
-.tool-btn:hover:not(:disabled) {
+.edit-screen .tool-btn:hover:not(:disabled) {
 	color: var(--title-ink);
 	background: var(--divider-bg);
 }
 
-.tool-btn:disabled {
+.edit-screen .tool-btn:disabled {
 	opacity: 0.32;
 	cursor: default;
 }
 
-.tool-btn.is-active {
+.edit-screen .tool-btn.is-active {
 	background: var(--title-ink);
 	color: var(--page-bg);
 }
 
-.tool-btn.is-active:hover {
+.edit-screen .tool-btn.is-active:hover {
 	background: var(--title-ink);
 	color: var(--page-bg);
 }
 
-.tool-btn:focus-visible {
+.edit-screen .tool-btn:focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
-.tool-level {
-	min-width: 52px;
-	font-size: 0.72rem;
+.edit-screen .tool-level {
+	min-width: 0;
+	width: 36px;
+	height: 26px;
+	font-size: 0.65rem;
+	letter-spacing: -0.02em;
 	color: var(--title-ink);
 }
 
-.tool-sep {
-	width: 1px;
-	height: 18px;
+.edit-screen .tool-sep {
+	width: 20px;
+	height: 1px;
 	background: var(--card-border);
-	margin: 0 3px;
+	margin: 2px 0;
 }
 
 /* ── 3. KOLOM KANAN: Foto · Filter · Stiker ── */
@@ -1120,7 +1111,6 @@
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
 	.edit-screen,
-	.bg-frame,
 	.back-pill,
 	.photo-item,
 	.canvas-zoom-layer,
@@ -1156,10 +1146,6 @@
 		min-height: 100dvh;
 		overflow-x: hidden;
 		overflow-y: auto;
-	}
-
-	.bg-frame {
-		position: fixed;
 	}
 
 	.frame-inner {
