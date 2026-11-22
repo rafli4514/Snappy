@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { session } from '#lib/stores/session';
-	import { loadGallerySession, buildAnimatedGif } from '#lib/services/gallery';
+	import {
+		loadGallerySession,
+		fetchSessionCloudSync,
+		buildAnimatedGif
+	} from '#lib/services/gallery';
 	import { playGrekSound } from '#lib/utils/audio';
 	import { getProductForCount } from '#lib/utils/canvas';
 	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
@@ -34,6 +38,9 @@
 	let loopTimer: ReturnType<typeof setInterval> | null = null;
 
 	let downloadingAll = false;
+	let driveFolderUrl: string | null = null;
+	let drivePollTimer: ReturnType<typeof setTimeout> | null = null;
+	let destroyed = false;
 
 	// Touch & Pointer gesture tracking for smooth swiping
 	let pointerStartX = 0;
@@ -217,6 +224,38 @@
 		}
 	}
 
+	async function loadDriveLink(id: string): Promise<void> {
+		const startedAt = Date.now();
+		const MAX_WAIT_MS = 30000;
+
+		const poll = async (): Promise<void> => {
+			if (destroyed) return;
+			const sync = await fetchSessionCloudSync(id);
+			if (destroyed) return;
+
+			if (sync?.isPublic && sync.driveFolderUrl) {
+				driveFolderUrl = sync.driveFolderUrl;
+				return;
+			}
+
+			if (
+				!sync ||
+				sync.status === 'done' ||
+				sync.status === 'failed' ||
+				sync.status === 'disabled' ||
+				Date.now() - startedAt >= MAX_WAIT_MS
+			) {
+				return;
+			}
+
+			drivePollTimer = setTimeout(() => {
+				void poll();
+			}, 2500);
+		};
+
+		await poll();
+	}
+
 	onMount(async () => {
 		window.addEventListener('keydown', handleKeyDown);
 
@@ -225,6 +264,7 @@
 			loading = false;
 			return;
 		}
+		void loadDriveLink(sessionId);
 		try {
 			galleryData = await loadGallerySession(sessionId);
 			if (!galleryData) {
@@ -250,6 +290,8 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
+		if (drivePollTimer) clearTimeout(drivePollTimer);
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('keydown', handleKeyDown);
 		}
@@ -434,6 +476,31 @@
 				</div>
 
 				<div class="header-actions">
+					{#if driveFolderUrl}
+						<a
+							href={driveFolderUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="drive-pill-btn"
+							aria-label="Buka folder sesi di Google Drive"
+						>
+							<svg
+								width="15"
+								height="15"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+							</svg>
+							<span class="drive-btn-text">Google Drive</span>
+						</a>
+					{/if}
+
 					<!-- Quick Download All Button -->
 					<button
 						type="button"
@@ -936,6 +1003,39 @@
 	.dl-all-pill-btn:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
+	}
+
+	.drive-pill-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		min-height: 40px;
+		padding: 0 15px;
+		border: 1px solid var(--btn-border);
+		border-radius: var(--radius-full, 9999px);
+		background: var(--card-bg);
+		color: var(--title-ink);
+		font-family: var(--font-body);
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0.01em;
+		text-decoration: none;
+		white-space: nowrap;
+		box-shadow: var(--nav-shadow);
+		transition:
+			background-color 180ms ease,
+			border-color 180ms ease,
+			transform 180ms ease;
+	}
+
+	.drive-pill-btn:hover {
+		background: var(--divider-bg);
+		transform: translateY(-1px);
+	}
+
+	.drive-pill-btn:active {
+		transform: scale(0.98);
 	}
 
 	/* ── Deck Main Layout ── */
@@ -1463,7 +1563,8 @@
 			font-size: 0.66rem;
 		}
 
-		.dl-all-pill-btn {
+		.dl-all-pill-btn,
+		.drive-pill-btn {
 			min-height: 38px;
 			padding: 0 12px;
 			font-size: 0.72rem;

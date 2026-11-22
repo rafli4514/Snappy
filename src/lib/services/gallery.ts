@@ -44,10 +44,32 @@ interface SaveGallerySessionInput {
 	videoDataUrl?: string | null;
 }
 
+export type CloudQrMode = 'smart' | 'gallery' | 'local';
+
+export interface SaveGallerySessionResult {
+	id: string;
+	qrMode: CloudQrMode;
+	cloudEligible: boolean;
+}
+
+export interface SessionCloudSyncStatus {
+	ok: boolean;
+	sessionId: string;
+	qrMode: CloudQrMode;
+	publicBaseUrl?: string | null;
+	cloudEligible: boolean;
+	status: 'pending' | 'processing' | 'done' | 'failed' | 'disabled' | string;
+	isPublic: boolean;
+	driveFolderUrl?: string | null;
+	uploadedCount: number;
+	totalFiles: number;
+	error?: string | null;
+}
+
 const MAX_GALLERY_VIDEO_BYTES = 12 * 1024 * 1024; // ~9MB binary guard for data URL
 
-/** Save a gallery session and return its ID. */
-export async function saveGallerySession({
+/** Save a gallery session and return its ID plus Smart Cloud QR metadata. */
+export async function saveGallerySessionWithStatus({
 	id = null,
 	photos,
 	stripDataUrl,
@@ -55,7 +77,7 @@ export async function saveGallerySession({
 	formatId,
 	gifDataUrl = null,
 	videoDataUrl = null
-}: SaveGallerySessionInput): Promise<string> {
+}: SaveGallerySessionInput): Promise<SaveGallerySessionResult> {
 	const finalId = id || generateId();
 	let safeVideo: string | null = videoDataUrl || null;
 	if (safeVideo && safeVideo.length > MAX_GALLERY_VIDEO_BYTES * 1.37) {
@@ -73,6 +95,9 @@ export async function saveGallerySession({
 		videoDataUrl: safeVideo
 	};
 
+	let cloudEligible = false;
+	let qrMode: CloudQrMode = 'smart';
+
 	// 1. Save to server API
 	try {
 		const res = await fetch('/api/gallery', {
@@ -80,7 +105,16 @@ export async function saveGallerySession({
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(sess)
 		});
-		if (!res.ok) {
+		if (res.ok) {
+			const data = (await res.json().catch(() => null)) as {
+				cloudEligible?: boolean;
+				qrMode?: CloudQrMode;
+			} | null;
+			cloudEligible = data?.cloudEligible === true;
+			if (data?.qrMode === 'gallery' || data?.qrMode === 'local' || data?.qrMode === 'smart') {
+				qrMode = data.qrMode;
+			}
+		} else {
 			console.warn('Server gallery API returned status:', res.status);
 		}
 	} catch (err: unknown) {
@@ -100,7 +134,28 @@ export async function saveGallerySession({
 		console.warn('Could not save session to IndexedDB:', err);
 	}
 
-	return finalId;
+	return { id: finalId, qrMode, cloudEligible };
+}
+
+/** Save a gallery session and return its ID. */
+export async function saveGallerySession(input: SaveGallerySessionInput): Promise<string> {
+	const res = await saveGallerySessionWithStatus(input);
+	return res.id;
+}
+
+/** Query the Google Drive sync & public-folder state for a single gallery session. */
+export async function fetchSessionCloudSync(
+	sessionId: string
+): Promise<SessionCloudSyncStatus | null> {
+	if (!sessionId) return null;
+	try {
+		const res = await fetch(`/api/cloud/sync/${encodeURIComponent(sessionId)}`);
+		if (!res.ok) return null;
+		const data = (await res.json()) as SessionCloudSyncStatus | null;
+		return data && data.ok ? data : null;
+	} catch {
+		return null;
+	}
 }
 
 /** Load a gallery session by ID. First tries server API, then falls back to IndexedDB. */
@@ -180,11 +235,25 @@ export async function buildQRCodeDataUrl(galleryUrl: string, size = 300): Promis
 
 /**
  * Resolve the scannable gallery URL for a session.
- * Automatically checks for host machine's LAN IP if currently running on localhost,
- * so phones on the same Wi-Fi can scan and open it!
+ * Prefers configured publicBaseUrl (e.g. Cloudflare Tunnel / studio domain) when set.
+ * Otherwise swaps localhost for the host machine's LAN IP while preserving active protocol (http/https).
  */
 export async function resolveGalleryUrl(sessionId: string): Promise<string> {
 	if (typeof window === 'undefined') return '';
+
+	try {
+		const cloudRes = await fetch('/api/cloud/google/status');
+		if (cloudRes.ok) {
+			const cloudData = (await cloudRes.json()) as { publicBaseUrl?: string | null };
+			const pub = cloudData?.publicBaseUrl?.trim().replace(/\/+$/, '');
+			if (pub && /^https?:\/\//i.test(pub)) {
+				return `${pub}/gallery/${sessionId}`;
+			}
+		}
+	} catch {
+		// abaikan — lanjut pakai origin / LAN IP
+	}
+
 	const currentHost = window.location.hostname;
 	const isLocalhost =
 		currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost === '::1';
@@ -195,8 +264,9 @@ export async function resolveGalleryUrl(sessionId: string): Promise<string> {
 			if (res.ok) {
 				const { ip } = (await res.json()) as { ip?: string | null };
 				if (ip) {
+					const proto = window.location.protocol === 'https:' ? 'https:' : 'http:';
 					const port = window.location.port ? `:${window.location.port}` : '';
-					return `http://${ip}${port}/gallery/${sessionId}`;
+					return `${proto}//${ip}${port}/gallery/${sessionId}`;
 				}
 			}
 		} catch (e: unknown) {

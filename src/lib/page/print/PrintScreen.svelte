@@ -10,7 +10,8 @@
 	import { customFiltersStore } from '#lib/services/customAssets';
 	import { downloadStripPNG, printStrip } from '#lib/utils/export';
 	import {
-		saveGallerySession,
+		saveGallerySessionWithStatus,
+		fetchSessionCloudSync,
 		buildQRCodeDataUrl,
 		resolveGalleryUrl,
 		generateId
@@ -19,11 +20,18 @@
 	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 
 	type PreviewTab = 'strip' | 'photos' | 'timelapse';
+	type QrSource = 'drive' | 'local';
+	type CloudQrState = 'idle' | 'waiting' | 'uploading' | 'done' | 'fallback' | 'failed';
 
 	const AUTO_SLIDE_MS = 3000;
+	const CLOUD_INITIAL_TIMEOUT_MS = 8000;
+	const CLOUD_INITIAL_POLL_MS = 650;
+	const CLOUD_BG_POLL_MS = 1500;
+	const CLOUD_MAX_POLL_MS = 90000;
 
 	let previewCanvas: HTMLCanvasElement;
 	let activeTab: PreviewTab = 'strip';
+	let destroyed = false;
 
 	// State slide untuk tab Foto Sesi
 	let activePhotoIndex = 0;
@@ -40,12 +48,31 @@
 	let actionError: string | null = null;
 	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 	let downloadTimer: ReturnType<typeof setTimeout> | null = null;
+	let cloudPollTimer: ReturnType<typeof setTimeout> | null = null;
 
-	let qrImageUrl: string | null = null;
-	let galleryUrl: string | null = null;
+	let localGalleryUrl: string | null = null;
+	let localQrImageUrl: string | null = null;
+	let driveFolderUrl: string | null = null;
+	let driveQrImageUrl: string | null = null;
+	let activeQrSource: QrSource = 'local';
+	let activeQrMode: 'smart' | 'gallery' | 'local' = 'smart';
+	let qrLoadingLabel = 'Menyiapkan QR…';
+	let cloudState: CloudQrState = 'idle';
+	let cloudUploadedCount = 0;
+	let cloudTotalFiles = 0;
+	let cloudFallbackNote: string | null = null;
 	let galleryReady = false;
 	let galleryError: string | null = null;
 	let copiedUrl = false;
+
+	$: galleryUrl = activeQrSource === 'drive' && driveFolderUrl ? driveFolderUrl : localGalleryUrl;
+	$: qrImageUrl = activeQrSource === 'drive' && driveQrImageUrl ? driveQrImageUrl : localQrImageUrl;
+	$: hasDriveQr = Boolean(driveFolderUrl && driveQrImageUrl);
+	$: hasBothQr = Boolean(hasDriveQr && localGalleryUrl && localQrImageUrl);
+	$: localLabel =
+		activeQrMode === 'gallery' || (localGalleryUrl ? /^https:\/\//i.test(localGalleryUrl) : false)
+			? 'Galeri Web'
+			: 'Wi-Fi Lokal';
 
 	$: theme = $session.theme;
 	$: photos = $stripPhotos;
@@ -198,8 +225,10 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
 		if (copyTimer) clearTimeout(copyTimer);
 		if (downloadTimer) clearTimeout(downloadTimer);
+		if (cloudPollTimer) clearTimeout(cloudPollTimer);
 		stopSlideTimer();
 	});
 
@@ -237,44 +266,164 @@
 		await drawSheetPreview();
 	}
 
+	function switchQrSource(next: QrSource): void {
+		if (next === 'drive' && !hasDriveQr) return;
+		if (next === 'local' && !localQrImageUrl) return;
+		activeQrSource = next;
+		copiedUrl = false;
+	}
+
+	async function pollCloudSyncForQR(sessionId: string): Promise<void> {
+		const startedAt = Date.now();
+
+		const step = async (): Promise<void> => {
+			if (destroyed) return;
+			const sync = await fetchSessionCloudSync(sessionId);
+			if (destroyed) return;
+
+			const elapsed = Date.now() - startedAt;
+
+			if (sync) {
+				cloudUploadedCount = sync.uploadedCount;
+				cloudTotalFiles = sync.totalFiles;
+
+				if (sync.isPublic && sync.driveFolderUrl) {
+					if (!driveQrImageUrl || driveFolderUrl !== sync.driveFolderUrl) {
+						try {
+							const qr = await buildQRCodeDataUrl(sync.driveFolderUrl, 512);
+							if (destroyed) return;
+							driveFolderUrl = sync.driveFolderUrl;
+							driveQrImageUrl = qr;
+						} catch (qrErr) {
+							console.warn('Gagal membuat QR Google Drive:', qrErr);
+						}
+					}
+
+					// Jika masih menunggu di fase awal, langsung tampilkan QR Drive.
+					// Jika sebelumnya sudah fallback ke LAN, JANGAN ganti otomatis di tengah scan;
+					// cukup tampilkan tombol alih Google Drive agar tamu tidak salah pindai.
+					if (driveQrImageUrl && !galleryReady) {
+						activeQrSource = 'drive';
+						galleryReady = true;
+						cloudFallbackNote = null;
+					}
+
+					if (sync.status === 'done') {
+						cloudState = 'done';
+						return;
+					}
+					if (sync.status === 'failed') {
+						cloudState = 'failed';
+						return;
+					}
+					cloudState = 'uploading';
+				} else if (
+					sync.status === 'failed' ||
+					sync.status === 'disabled' ||
+					(sync.status === 'done' && !sync.isPublic)
+				) {
+					if (!galleryReady) {
+						activeQrSource = 'local';
+						galleryReady = true;
+					}
+					cloudState = 'fallback';
+					cloudFallbackNote =
+						sync.status === 'done' && !sync.isPublic
+							? 'Folder Drive privat — menggunakan QR Wi-Fi Lokal'
+							: 'Google Drive tidak terjangkau — menggunakan QR Wi-Fi Lokal';
+					return;
+				}
+			}
+
+			if (!galleryReady && elapsed >= CLOUD_INITIAL_TIMEOUT_MS) {
+				activeQrSource = 'local';
+				galleryReady = true;
+				cloudState = 'fallback';
+				cloudFallbackNote = 'Koneksi Drive lambat — menggunakan QR Wi-Fi Lokal';
+			}
+
+			if (elapsed >= CLOUD_MAX_POLL_MS) {
+				if (!galleryReady) {
+					activeQrSource = 'local';
+					galleryReady = true;
+					cloudState = 'fallback';
+				}
+				return;
+			}
+
+			const delay = galleryReady ? CLOUD_BG_POLL_MS : CLOUD_INITIAL_POLL_MS;
+			cloudPollTimer = setTimeout(() => {
+				void step();
+			}, delay);
+		};
+
+		await step();
+	}
+
 	async function generateGalleryQR(): Promise<void> {
 		try {
 			const sessionId = generateId();
-			galleryUrl = await resolveGalleryUrl(sessionId);
-			qrImageUrl = await buildQRCodeDataUrl(galleryUrl, 512);
-			galleryReady = true;
+			qrLoadingLabel = 'Menyiapkan galeri & QR…';
 
-			void (async () => {
-				try {
-					let stripDataUrl = '';
-					try {
-						const full = await renderExportCanvas(photos, activeTemplate, {
-							caption,
-							showDate,
-							copies,
-							formatId: $session.formatId,
-							photoTransforms,
-							stickers,
-							photoFilter: photoFilterCss
-						});
-						stripDataUrl = full.toDataURL('image/png');
-					} catch (ce) {
-						console.warn('Ekspor strip untuk galeri gagal:', ce);
-					}
+			// Siapkan URL LAN lokal + QR fallback paralel sambil merender strip 300 DPI
+			const localUrlPromise = resolveGalleryUrl(sessionId);
+			let stripDataUrl = '';
+			try {
+				const full = await renderExportCanvas(photos, activeTemplate, {
+					caption,
+					showDate,
+					copies,
+					formatId: $session.formatId,
+					photoTransforms,
+					stickers,
+					photoFilter: photoFilterCss
+				});
+				stripDataUrl = full.toDataURL('image/png');
+			} catch (ce) {
+				console.warn('Ekspor strip untuk galeri gagal:', ce);
+			}
 
-					await saveGallerySession({
-						id: sessionId,
-						photos: (photos || []).filter(Boolean),
-						stripDataUrl,
-						templateKey: typeof activeTemplate === 'string' ? activeTemplate : 'custom',
-						formatId: $session.formatId,
-						gifDataUrl: gifUrl ?? null,
-						videoDataUrl: videoUrl ?? null
-					});
-				} catch (saveErr) {
-					console.warn('Simpan sesi galeri gagal:', saveErr);
+			const resolvedLocal = await localUrlPromise;
+			if (destroyed) return;
+			localGalleryUrl = resolvedLocal;
+			localQrImageUrl = await buildQRCodeDataUrl(resolvedLocal, 512);
+			if (destroyed) return;
+
+			qrLoadingLabel = 'Menyiapkan QR Google Drive…';
+
+			let cloudEligible = false;
+			let qrMode: 'smart' | 'gallery' | 'local' = 'smart';
+			try {
+				const saved = await saveGallerySessionWithStatus({
+					id: sessionId,
+					photos: (photos || []).filter(Boolean),
+					stripDataUrl,
+					templateKey: typeof activeTemplate === 'string' ? activeTemplate : 'custom',
+					formatId: $session.formatId,
+					gifDataUrl: gifUrl ?? null,
+					videoDataUrl: videoUrl ?? null
+				});
+				cloudEligible = saved.cloudEligible;
+				qrMode = saved.qrMode;
+				activeQrMode = qrMode;
+			} catch (saveErr) {
+				console.warn('Simpan sesi galeri gagal:', saveErr);
+			}
+			if (destroyed) return;
+
+			if (!cloudEligible) {
+				activeQrSource = 'local';
+				cloudState = 'idle';
+				galleryReady = true;
+				if (qrMode === 'gallery') {
+					// Tetap pantau sinkronisasi Drive di latar belakang agar tombol alih & status Drive muncul
+					void pollCloudSyncForQR(sessionId);
 				}
-			})();
+				return;
+			}
+
+			cloudState = 'waiting';
+			void pollCloudSyncForQR(sessionId);
 		} catch (e) {
 			console.error('QR galeri gagal dibuat:', e);
 			galleryError = 'QR gagal dibuat. Strip tetap bisa dicetak atau diunduh.';
@@ -674,8 +823,16 @@
 				<div class="panel-body">
 					<section class="qr-card" aria-labelledby="qr-title">
 						<div class="qr-head">
-							<h2 id="qr-title" class="group-eyebrow">GALERI HP</h2>
-							<p class="qr-sub">Pindai QR untuk simpan strip, foto &amp; timelapse</p>
+							<h2 id="qr-title" class="group-eyebrow">
+								{activeQrSource === 'drive' ? 'GALERI GOOGLE DRIVE' : 'GALERI HP'}
+							</h2>
+							<p class="qr-sub">
+								{#if activeQrSource === 'drive'}
+									Pindai pakai kuota HP untuk unduh strip, foto &amp; timelapse
+								{:else}
+									Pindai QR untuk simpan strip, foto &amp; timelapse
+								{/if}
+							</p>
 						</div>
 
 						{#if galleryReady && qrImageUrl && galleryUrl}
@@ -684,6 +841,60 @@
 									<img src={qrImageUrl} alt="QR code galeri foto sesi" draggable="false" />
 								</div>
 							</div>
+
+							{#if hasBothQr}
+								<div class="qr-source-pill" role="group" aria-label="Pilih sumber QR">
+									<button
+										type="button"
+										class="qr-source-opt"
+										class:is-active={activeQrSource === 'drive'}
+										aria-pressed={activeQrSource === 'drive'}
+										on:click={() => switchQrSource('drive')}
+									>
+										Google Drive
+									</button>
+									<button
+										type="button"
+										class="qr-source-opt"
+										class:is-active={activeQrSource === 'local'}
+										aria-pressed={activeQrSource === 'local'}
+										on:click={() => switchQrSource('local')}
+									>
+										{localLabel}
+									</button>
+								</div>
+							{/if}
+
+							{#if cloudState === 'uploading'}
+								<div class="qr-cloud-status is-syncing" role="status" aria-live="polite">
+									<span class="qr-status-dot is-pulse" aria-hidden="true"></span>
+									<span>
+										{cloudTotalFiles > 0
+											? `Mengunggah ke Drive (${cloudUploadedCount}/${cloudTotalFiles} berkas)…`
+											: 'Mengunggah berkas ke Google Drive…'}
+									</span>
+								</div>
+							{:else if cloudState === 'done' && activeQrSource === 'drive'}
+								<div class="qr-cloud-status is-done" role="status">
+									<span class="qr-status-dot" aria-hidden="true"></span>
+									<span>Siap di Google Drive · bisa dibuka pakai kuota HP</span>
+								</div>
+							{:else if cloudState === 'done' && hasDriveQr && activeQrSource === 'local'}
+								<div class="qr-cloud-status is-done" role="status">
+									<span class="qr-status-dot" aria-hidden="true"></span>
+									<span>Google Drive siap · pilih Google Drive untuk kuota HP</span>
+								</div>
+							{:else if cloudState === 'failed' && hasDriveQr}
+								<div class="qr-cloud-status is-warn" role="status">
+									<span class="qr-status-dot" aria-hidden="true"></span>
+									<span>Sebagian gagal unggah · gunakan Wi-Fi Lokal bila perlu</span>
+								</div>
+							{:else if cloudState === 'fallback' && cloudFallbackNote}
+								<div class="qr-cloud-status is-muted" role="status">
+									<span class="qr-status-dot" aria-hidden="true"></span>
+									<span>{cloudFallbackNote}</span>
+								</div>
+							{/if}
 
 							<div class="qr-link-bar">
 								<span class="qr-url" title={galleryUrl}>{galleryUrl}</span>
@@ -700,7 +911,7 @@
 							<div class="qr-wrap">
 								<div class="qr-box qr-loading" role="status">
 									<span class="spinner" aria-hidden="true"></span>
-									<span>Menyiapkan QR…</span>
+									<span>{qrLoadingLabel}</span>
 								</div>
 							</div>
 						{/if}

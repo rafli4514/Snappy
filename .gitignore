@@ -61,3 +61,6 @@ inspect_*.js
 
 postman/
 .postman
+
+# Rust Backend
+backend/target/

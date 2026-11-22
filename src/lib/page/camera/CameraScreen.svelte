@@ -116,6 +116,14 @@
 	$: flipCss = $session.flipHorizontal ? 'scaleX(-1)' : ('none' as any);
 	$: filterCss = FILTER_CSS[cam.filter];
 
+	$: httpsUpgradeUrl =
+		typeof window !== 'undefined' &&
+		window.location.protocol === 'http:' &&
+		window.location.hostname !== 'localhost' &&
+		window.location.hostname !== '127.0.0.1'
+			? `https://${window.location.host}${window.location.pathname}${window.location.search}`
+			: null;
+
 	$: timerLabel = TIMER_LABELS[cam.timer];
 	$: flashLabel = FLASH_LABELS[cam.flash];
 	$: filterLabel = FILTER_LABELS[cam.filter];
@@ -361,27 +369,43 @@
 		<div class="error-state">
 			<PermissionIllus size="160" />
 			<div class="error-text">
-				{#if errorType === 'permission_denied'}
-					<h2>Camera access denied</h2>
-					<p>Allow camera access in your browser settings, then tap <strong>Try Again</strong>.</p>
+				{#if errorType === 'https_required'}
+					<h2>Kamera butuh HTTPS di HP</h2>
+					<p>
+						Browser HP memblokir kamera pada alamat <code>http://</code>. Jalankan server dengan
+						<code>npm run dev:https</code> lalu buka lewat alamat <code>https://</code>.
+					</p>
 					<div class="error-steps">
-						<p>On Chrome: tap the 🔒 icon in the address bar → Camera → Allow</p>
-						<p>On Safari: Settings → Safari → Camera → Allow</p>
+						<p>Di komputer: hentikan server lama lalu jalankan <code>npm run dev:https</code></p>
+						<p>
+							Di HP: buka <code>https://&lt;IP-Lokal&gt;:5173</code> lalu pilih
+							<strong>Lanjutkan / Proceed</strong> sekali
+						</p>
+					</div>
+				{:else if errorType === 'permission_denied'}
+					<h2>Izin kamera ditolak</h2>
+					<p>Izinkan akses kamera di pengaturan browser, lalu ketuk <strong>Coba Lagi</strong>.</p>
+					<div class="error-steps">
+						<p>Di Chrome: ketuk ikon 🔒 di address bar → Kamera → Izinkan</p>
+						<p>Di Safari iOS: Pengaturan → Safari → Kamera → Izinkan</p>
 					</div>
 				{:else if errorType === 'no_camera'}
-					<h2>No camera found</h2>
-					<p>Make sure your camera is connected and not in use by another app.</p>
+					<h2>Kamera tidak ditemukan</h2>
+					<p>Pastikan kamera perangkat terpasang dan tidak sedang dipakai aplikasi lain.</p>
 				{:else if errorType === 'camera_busy'}
-					<h2>Camera is in use</h2>
-					<p>Another app is using your camera. Close it and try again.</p>
+					<h2>Kamera sedang dipakai</h2>
+					<p>Aplikasi lain sedang menggunakan kamera. Tutup aplikasi tersebut lalu coba lagi.</p>
 				{:else}
-					<h2>Camera error</h2>
-					<p>An unexpected error occurred. Please try again.</p>
+					<h2>Kamera gagal dibuka</h2>
+					<p>Terjadi kendala saat menyalakan kamera. Silakan coba lagi.</p>
 				{/if}
 			</div>
 			<div class="error-actions">
+				{#if errorType === 'https_required' && httpsUpgradeUrl}
+					<a href={httpsUpgradeUrl} class="btn btn-primary">Buka via HTTPS</a>
+				{/if}
 				<button id="btn-retry-camera" class="btn btn-primary" on:click={retryPermission}>
-					Try Again
+					Coba Lagi
 				</button>
 				<button
 					id="btn-error-back"
@@ -389,7 +413,7 @@
 					on:click={() => goTo('start')}
 					aria-label="Kembali ke layar mulai"
 				>
-					← Back
+					← Kembali
 				</button>
 			</div>
 		</div>

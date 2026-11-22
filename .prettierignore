@@ -15,3 +15,4 @@ bun.lockb
 
 # Miscellaneous
 /static/
+/backend/

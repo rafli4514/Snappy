@@ -13,7 +13,9 @@
 		RotateCcw,
 		X,
 		ChevronLeft,
-		ChevronRight
+		ChevronRight,
+		Upload,
+		ExternalLink
 	} from '@lucide/svelte';
 
 	type Item = {
@@ -39,6 +41,13 @@
 	let items = $state<Item[]>([]);
 	let summary = $state({ total: 0, pending: 0, failed: 0, done: 0 });
 	let context = $state<{ gallerySessions?: number }>({});
+	let cloudStatus = $state<{
+		connected: boolean;
+		needsReconnect: boolean;
+		email: string | null;
+		rootFolderName: string;
+	} | null>(null);
+	let syncingAll = $state(false);
 
 	let filter = $state<StatusFilter>('all');
 	let query = $state('');
@@ -83,7 +92,10 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch('/api/queue?type=cloud-sync&limit=200');
+			const [res, cloudRes] = await Promise.all([
+				fetch('/api/queue?type=cloud-sync&limit=200'),
+				fetch('/api/cloud/google/status').catch(() => null)
+			]);
 			const data = (await res.json()) as {
 				ok?: boolean;
 				items?: Item[];
@@ -95,11 +107,74 @@
 			items = data.items || [];
 			summary = data.summary?.['cloud-sync'] || { total: 0, pending: 0, failed: 0, done: 0 };
 			context = data.context || {};
+			if (cloudRes?.ok) {
+				const cData = (await cloudRes.json().catch(() => null)) as {
+					ok?: boolean;
+					connected?: boolean;
+					needsReconnect?: boolean;
+					email?: string | null;
+					rootFolderName?: string;
+				} | null;
+				if (cData?.ok) {
+					cloudStatus = {
+						connected: Boolean(cData.connected),
+						needsReconnect: Boolean(cData.needsReconnect),
+						email: cData.email ?? null,
+						rootFolderName: cData.rootFolderName || 'DISTUDIO Photobooth'
+					};
+				}
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal memuat antrean cloud sync.';
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function syncDrive(sessionId?: string): Promise<void> {
+		if (sessionId) busyId = sessionId;
+		else syncingAll = true;
+		error = null;
+		notice = null;
+		try {
+			const res = await fetch('/api/cloud/sync', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(sessionId ? { sessionId } : { allPending: true })
+			});
+			const data = (await res.json().catch(() => ({}))) as {
+				ok?: boolean;
+				results?: { status: string; error?: string }[];
+				error?: string;
+			};
+			if (!res.ok || !data.ok)
+				throw new Error(data.error || 'Gagal menyinkronkan ke Google Drive.');
+			const results = data.results || [];
+			if (results.length === 0) {
+				notice = 'Semua sesi lokal sudah tersinkron ke Google Drive.';
+			} else {
+				const okCount = results.filter((r) => r.status === 'done').length;
+				const failCount = results.filter((r) => r.status === 'failed').length;
+				if (failCount > 0) {
+					const errText = results.find((r) => r.error)?.error;
+					error = `${okCount} sesi selesai, ${failCount} gagal${errText ? `: ${errText}` : '.'}`;
+				} else {
+					notice = `${okCount} sesi berhasil diunggah ke Google Drive.`;
+				}
+			}
+			await load();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Gagal menyinkronkan ke Google Drive.';
+		} finally {
+			busyId = null;
+			syncingAll = false;
+		}
+	}
+
+	function extractDriveUrl(text?: string): string | null {
+		if (!text) return null;
+		const match = text.match(/https:\/\/drive\.google\.com\/[^\s]+/);
+		return match ? match[0] : null;
 	}
 
 	function openAddModal(): void {
@@ -243,14 +318,38 @@
 		<div class="cs-head-copy">
 			<div class="cs-title-row">
 				<h1 class="cs-title">Sinkronisasi Cloud</h1>
-				<span class="cs-mode-pill">Mode Lokal</span>
+				{#if cloudStatus?.connected && !cloudStatus.needsReconnect}
+					<span class="cs-mode-pill is-connected">
+						Google Drive · {cloudStatus.email || 'Terhubung'}
+					</span>
+				{:else if cloudStatus?.needsReconnect}
+					<a href="/dashboard/settings?tab=cloud" class="cs-mode-pill is-warn-link">
+						Perlu Hubungkan Ulang
+					</a>
+				{:else}
+					<a href="/dashboard/settings?tab=cloud" class="cs-mode-pill is-setup-link">
+						Mode Lokal · Hubungkan Google Drive
+					</a>
+				{/if}
 			</div>
 			<p class="cs-sub">
-				Catat dan kelola daftar arsip sesi yang menunggu sinkronisasi ke penyimpanan cloud.
+				Pantau unggahan otomatis sesi ke Google Drive atau jalankan sinkronisasi manual.
 			</p>
 		</div>
 
 		<div class="cs-head-actions">
+			{#if cloudStatus?.connected && !cloudStatus.needsReconnect}
+				<button
+					type="button"
+					class="cs-btn is-primary"
+					onclick={() => syncDrive()}
+					disabled={syncingAll || loading}
+				>
+					<Upload size={14} />
+					{syncingAll ? 'Menyinkronkan...' : 'Sinkronkan Semua'}
+				</button>
+			{/if}
+
 			<button type="button" class="cs-btn" onclick={load} disabled={loading}>
 				<span class="cs-spin-wrap" class:is-spinning={loading}><RefreshCw size={14} /></span>
 				Muat Ulang
@@ -460,6 +559,30 @@
 						</div>
 
 						<div class="cs-row-actions">
+							{#if extractDriveUrl(item.detail)}
+								<a
+									href={extractDriveUrl(item.detail)}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="cs-icon-btn"
+									title="Buka folder di Google Drive"
+									aria-label="Buka folder di Google Drive"
+								>
+									<ExternalLink size={14} />
+								</a>
+							{/if}
+							{#if cloudStatus?.connected && !cloudStatus.needsReconnect && item.ref && item.status !== 'done'}
+								<button
+									type="button"
+									class="cs-icon-btn is-ok"
+									disabled={busyId === item.ref || syncingAll}
+									onclick={() => syncDrive(item.ref)}
+									title="Unggah ulang sesi ke Google Drive"
+									aria-label="Unggah ulang sesi ke Google Drive"
+								>
+									<Upload size={14} />
+								</button>
+							{/if}
 							{#if item.status !== 'done'}
 								<button
 									type="button"
@@ -656,6 +779,24 @@
 		color: var(--d-muted);
 		font-size: 0.68rem;
 		font-weight: 700;
+		text-decoration: none;
+	}
+
+	.cs-mode-pill.is-connected {
+		background: var(--d-ok-soft);
+		border-color: transparent;
+		color: var(--d-ok);
+	}
+
+	.cs-mode-pill.is-warn-link {
+		background: var(--d-err-soft);
+		border-color: transparent;
+		color: var(--d-err);
+	}
+
+	.cs-mode-pill.is-setup-link:hover {
+		color: var(--d-ink);
+		border-color: var(--d-border-strong);
 	}
 
 	.cs-sub {

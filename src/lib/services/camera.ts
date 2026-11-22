@@ -10,29 +10,66 @@ let activeStream: MediaStream | null = null;
 /** Current facing mode */
 let currentFacingMode: FacingMode = 'user';
 
-/** Start the camera with a given facing mode. */
+/** Start the camera with a given facing mode (mobile-safe with constraint fallbacks). */
 export async function startCamera(facingMode: FacingMode = 'user'): Promise<MediaStream> {
 	// Stop any existing stream first
 	stopCamera();
 	currentFacingMode = facingMode;
 
-	const constraints: MediaStreamConstraints = {
-		video: {
-			facingMode,
-			width: { ideal: 1280 },
-			height: { ideal: 960 }
-		},
-		audio: false
-	};
-
-	try {
-		const stream = await navigator.mediaDevices.getUserMedia(constraints);
-		activeStream = stream;
-		return stream;
-	} catch (err: unknown) {
-		activeStream = null;
+	if (
+		typeof navigator === 'undefined' ||
+		!navigator.mediaDevices ||
+		typeof navigator.mediaDevices.getUserMedia !== 'function'
+	) {
+		const err = new Error('Akses kamera membutuhkan koneksi aman (HTTPS atau localhost).');
+		err.name = 'InsecureContextError';
 		throw err;
 	}
+
+	const attempts: MediaStreamConstraints[] = [
+		{
+			video: {
+				facingMode: { ideal: facingMode },
+				width: { ideal: 1280 },
+				height: { ideal: 960 }
+			},
+			audio: false
+		},
+		{
+			video: { facingMode: { ideal: facingMode } },
+			audio: false
+		},
+		{
+			video: true,
+			audio: false
+		}
+	];
+
+	let lastErr: unknown = null;
+	for (let i = 0; i < attempts.length; i++) {
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia(attempts[i]);
+			activeStream = stream;
+			return stream;
+		} catch (err: unknown) {
+			lastErr = err;
+			const name =
+				typeof err === 'object' && err !== null ? ((err as { name?: string }).name ?? '') : '';
+			// Permission denied / hardware busy won't be fixed by relaxing constraints
+			if (
+				name === 'NotAllowedError' ||
+				name === 'PermissionDeniedError' ||
+				name === 'NotReadableError' ||
+				name === 'TrackStartError'
+			) {
+				activeStream = null;
+				throw err;
+			}
+		}
+	}
+
+	activeStream = null;
+	throw lastErr;
 }
 
 /** Stop all active camera tracks. */
@@ -49,24 +86,32 @@ export async function switchCamera(): Promise<MediaStream> {
 	return startCamera(next);
 }
 
-/** Check if the device supports multiple cameras. */
+/**
+ * Check if the device supports multiple cameras.
+ * IMPORTANT: Never open a second getUserMedia() stream while activeStream is running —
+ * on iOS Safari and many Android devices, a concurrent getUserMedia kills or locks the live stream.
+ */
 export async function hasMultipleCameras(): Promise<boolean> {
 	try {
-		// 1. Minta izin kamera untuk membuka label & deviceId yang akurat
-		const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+		if (
+			typeof navigator === 'undefined' ||
+			!navigator.mediaDevices ||
+			typeof navigator.mediaDevices.enumerateDevices !== 'function'
+		) {
+			return false;
+		}
 
-		// 2. Ambil daftar semua perangkat
+		// Enumerate directly (permission is already granted by startCamera())
 		const devices = await navigator.mediaDevices.enumerateDevices();
+		const videoCams = devices.filter((d) => d.kind === 'videoinput');
+		if (videoCams.length <= 1) {
+			return false;
+		}
 
-		// 3. Langsung matikan stream agar indikator lampu kamera padam
-		stream.getTracks().forEach((track) => track.stop());
-
-		// 4. Filter hanya input video dengan deviceId valid
-		const videoCams = devices.filter((d) => d.kind === 'videoinput' && d.deviceId !== '');
-
-		// 5. Filter kamera virtual / filter / sensor tambahan
+		// Filter kamera virtual / sensor tambahan bila label tersedia
 		const realCameras = videoCams.filter((cam) => {
-			const label = cam.label.toLowerCase();
+			const label = (cam.label || '').toLowerCase();
+			if (!label) return true;
 			const isVirtual =
 				label.includes('virtual') ||
 				label.includes('obs') ||
@@ -78,10 +123,10 @@ export async function hasMultipleCameras(): Promise<boolean> {
 			return !isVirtual && !isSensor;
 		});
 
-		// 6. Buat Set dari realCameras untuk memastikan deviceId unik
-		const uniqueCameraIds = new Set(realCameras.map((d) => d.deviceId));
-
-		return uniqueCameraIds.size > 1;
+		const uniqueKeys = new Set(
+			realCameras.map((d, idx) => (d.deviceId ? d.deviceId : `cam-${idx}`))
+		);
+		return uniqueKeys.size > 1;
 	} catch {
 		return false;
 	}
@@ -106,6 +151,8 @@ export function getCameraErrorMessage(err: unknown): string {
 		typeof err === 'object' && err !== null ? ((err as { name?: string }).name ?? '') : '';
 
 	switch (name) {
+		case 'InsecureContextError':
+			return 'https_required';
 		case 'NotAllowedError':
 		case 'PermissionDeniedError':
 			return 'permission_denied';
@@ -118,6 +165,9 @@ export function getCameraErrorMessage(err: unknown): string {
 		case 'OverconstrainedError':
 			return 'overconstrained';
 		default:
+			if (typeof window !== 'undefined' && !window.isSecureContext) {
+				return 'https_required';
+			}
 			return 'unknown';
 	}
 }
