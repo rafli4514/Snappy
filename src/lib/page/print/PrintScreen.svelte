@@ -267,6 +267,7 @@
 						photos: (photos || []).filter(Boolean),
 						stripDataUrl,
 						templateKey: typeof activeTemplate === 'string' ? activeTemplate : 'custom',
+						formatId: $session.formatId,
 						gifDataUrl: gifUrl ?? null,
 						videoDataUrl: videoUrl ?? null
 					});

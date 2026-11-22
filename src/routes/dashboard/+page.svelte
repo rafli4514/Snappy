@@ -1,9 +1,37 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { listFrames } from '#lib/utils/frameStorage';
-	import HBarChart from '#lib/features/dashboard/HBarChart.svelte';
-	import SegmentBar from '#lib/features/dashboard/SegmentBar.svelte';
-	import VBarChart from '#lib/features/dashboard/VBarChart.svelte';
+	import { getProductForCount } from '#lib/utils/canvas';
+	import { allFormats, type StandardFormat } from '#lib/data/standardFormats';
+	import { customFrameSizes, loadCustomFrameSizes } from '#lib/services/frameSizes';
+	import {
+		customStickersStore,
+		customFiltersStore,
+		customArStore,
+		loadCustomAssets
+	} from '#lib/services/customAssets';
+	import Sparkline from '#lib/features/dashboard/Sparkline.svelte';
+	import MultiSeriesChart, {
+		type SeriesDef
+	} from '#lib/features/dashboard/MultiSeriesChart.svelte';
+	import {
+		Globe,
+		RefreshCw,
+		ChevronRight,
+		ExternalLink,
+		X,
+		Printer,
+		Cloud,
+		Upload,
+		Frame,
+		Ruler,
+		Sticker,
+		SlidersHorizontal,
+		Sparkles,
+		TrendingUp,
+		TrendingDown,
+		Minus
+	} from '@lucide/svelte';
 
 	type SessionSummary = {
 		id: string;
@@ -11,28 +39,35 @@
 		photoCount?: number;
 		templateKey?: string;
 		formatId?: string;
-		hasGif?: boolean;
-		hasVideo?: boolean;
 	};
+	type QueueItem = {
+		id: string;
+		type: 'print' | 'cloud-sync' | 'upload';
+		status: string;
+		createdAt: string;
+	};
+	type QueueStat = { total: number; pending: number; failed: number; done: number };
 
-	let frames = $state<Awaited<ReturnType<typeof listFrames>>>([]);
-	let framesLoading = $state(true);
-	let sessionsLoading = $state(true);
-	let sessionsError = $state<string | null>(null);
-	let sessions = $state<SessionSummary[]>([]);
-
-	type TrendTab = 'hari' | 'minggu' | 'jam';
-	let activeTrendTab = $state<TrendTab>('minggu');
-
-	const TREND_TABS: { id: TrendTab; label: string }[] = [
-		{ id: 'hari', label: 'Per Hari' },
-		{ id: 'minggu', label: 'Per Minggu' },
-		{ id: 'jam', label: 'Per Jam' }
-	];
+	type MainTab = 'ringkasan' | 'tren' | 'eksplorasi' | 'operasional';
+	type RangePreset = '7d' | '14d' | '30d' | 'all';
+	type ExploreMetric = 'photos' | 'sessions';
+	type ExploreGroup = 'frameSize' | 'photoCount' | 'template';
+	type ExploreRollup = 'daily' | 'weekly' | 'hourly';
+	type ExploreSort = 'sum' | 'avg' | 'max';
 
 	const LIMIT = 200;
-	const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-	const MONTH_NAMES = [
+	const PALETTE = [
+		'#84cc16',
+		'#c084fc',
+		'#f472b6',
+		'#38bdf8',
+		'#fb923c',
+		'#34d399',
+		'#facc15',
+		'#818cf8'
+	];
+
+	const MONTHS = [
 		'Jan',
 		'Feb',
 		'Mar',
@@ -47,595 +82,2247 @@
 		'Des'
 	];
 
-	function startOfLocalDay(d: Date): Date {
+	const PRESET_LABELS: Record<string, string> = {
+		classic: 'Classic',
+		cobalt: 'Cobalt',
+		darkroom: 'Dark Room',
+		lavender: 'Lavender',
+		custom: 'Frame Kustom'
+	};
+
+	const MAIN_TABS: { id: MainTab; label: string }[] = [
+		{ id: 'ringkasan', label: 'Ringkasan' },
+		{ id: 'tren', label: 'Tren' },
+		{ id: 'eksplorasi', label: 'Eksplorasi' },
+		{ id: 'operasional', label: 'Operasional' }
+	];
+
+	const RANGE_OPTIONS: { id: RangePreset; short: string; label: string; days: number }[] = [
+		{ id: '7d', short: '7h', label: '7 Hari Terakhir', days: 7 },
+		{ id: '14d', short: '14h', label: '14 Hari Terakhir', days: 14 },
+		{ id: '30d', short: '1bln', label: '30 Hari Terakhir', days: 30 },
+		{ id: 'all', short: 'Semua', label: 'Seluruh Data', days: 30 }
+	];
+
+	// ── State utama ──
+	let activeTab = $state<MainTab>('ringkasan');
+	let rangePreset = $state<RangePreset>('30d');
+	let showCallout = $state(true);
+
+	let sessions = $state<SessionSummary[]>([]);
+	let queueItems = $state<QueueItem[]>([]);
+	let queueSummary = $state<Record<string, QueueStat>>({});
+	let frameCount = $state(0);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
+	let now = $state(new Date());
+
+	// ── State tab Tren & Eksplorasi ──
+	let trendMetricSize = $state<ExploreMetric>('sessions');
+	let trendMetricPhoto = $state<ExploreMetric>('photos');
+	let trendMetricTemplate = $state<ExploreMetric>('sessions');
+
+	let exMetric = $state<ExploreMetric>('photos');
+	let exGroup = $state<ExploreGroup>('frameSize');
+	let exRollup = $state<ExploreRollup>('daily');
+	let exTop = $state<number>(10);
+	let exSort = $state<ExploreSort>('sum');
+
+	const customSizesCount = $derived($customFrameSizes.length);
+	const customStickersCount = $derived($customStickersStore.length);
+	const customFiltersCount = $derived($customFiltersStore.length);
+	const customArCount = $derived($customArStore.length);
+
+	const tzLabel = $derived.by(() => {
+		const offsetMin = -now.getTimezoneOffset();
+		const sign = offsetMin >= 0 ? '+' : '-';
+		const hrs = Math.floor(Math.abs(offsetMin) / 60);
+		return `GMT${sign}${hrs}`;
+	});
+
+	const currentRange = $derived(
+		RANGE_OPTIONS.find((r) => r.id === rangePreset) ?? RANGE_OPTIONS[2]
+	);
+
+	// ── Utilitas tanggal ──
+	function startOfDay(d: Date): Date {
 		const x = new Date(d);
 		x.setHours(0, 0, 0, 0);
 		return x;
 	}
-
+	function startOfWeek(d: Date): Date {
+		const x = startOfDay(d);
+		x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+		return x;
+	}
 	function dayKey(d: Date): string {
 		const y = d.getFullYear();
 		const m = String(d.getMonth() + 1).padStart(2, '0');
 		const day = String(d.getDate()).padStart(2, '0');
 		return `${y}-${m}-${day}`;
 	}
-
-	/** Senin 00:00 waktu lokal sebagai awal minggu. */
-	function startOfLocalWeek(d: Date): Date {
-		const x = startOfLocalDay(d);
-		x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
-		return x;
-	}
-
 	function parseDate(iso?: string): Date | null {
 		if (!iso) return null;
 		const d = new Date(iso);
 		return Number.isFinite(d.getTime()) ? d : null;
 	}
 
-	const loadedCount = $derived(sessions.length);
-	const todayKey = $derived(dayKey(startOfLocalDay(new Date())));
-
-	const todayCount = $derived.by(() => {
-		let n = 0;
-		for (const s of sessions) {
-			const d = parseDate(s.createdAt);
-			if (d && dayKey(startOfLocalDay(d)) === todayKey) n++;
-		}
-		return n;
+	// ── Pemetaan Ukuran Frame, Paket Foto & Template ──
+	const formatsById = $derived.by(() => {
+		void $customFrameSizes;
+		return new Map<string, StandardFormat>(allFormats().map((f) => [f.id, f]));
 	});
 
-	const last7Count = $derived.by(() => {
-		const now = startOfLocalDay(new Date());
-		const from = new Date(now);
-		from.setDate(from.getDate() - 6);
-		let n = 0;
-		for (const s of sessions) {
-			const d = parseDate(s.createdAt);
-			if (!d) continue;
-			const sd = startOfLocalDay(d);
-			if (sd >= from && sd <= now) n++;
+	function resolveFrameSizeInfo(s: SessionSummary): { label: string; spec: string } {
+		const fid = (s.formatId || '').trim();
+		if (fid && formatsById.has(fid)) {
+			const fmt = formatsById.get(fid)!;
+			return {
+				label: fmt.label,
+				spec: `${fmt.cm} · ${fmt.pxW} × ${fmt.pxH} px`
+			};
 		}
-		return n;
+		const n = Math.max(1, Math.min(6, Math.round(Number(s.photoCount) || 4)));
+		const prod = getProductForCount(n);
+		return {
+			label: `${prod.nama} (${prod.cm} cm)`,
+			spec: `${prod.pxW} × ${prod.pxH} px · ${prod.sheetOrient === 'landscape' ? 'Landscape' : 'Portrait'}`
+		};
+	}
+
+	function frameSizeLabel(s: SessionSummary): string {
+		return resolveFrameSizeInfo(s).label;
+	}
+
+	function photoBucketLabel(s: SessionSummary): string {
+		const n = Math.round(Number(s.photoCount));
+		return Number.isFinite(n) && n >= 1 && n <= 6 ? `${n} Foto` : 'Lainnya';
+	}
+
+	function templateLabel(s: SessionSummary): string {
+		const raw = (s.templateKey || '').trim();
+		if (!raw) return 'Classic';
+		const lower = raw.toLowerCase();
+		if (PRESET_LABELS[lower]) return PRESET_LABELS[lower];
+		return raw.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
+	function shortId(id: string): string {
+		const clean = id.replace(/^session[-_]?/i, '');
+		return `#${clean.slice(-6).toUpperCase()}`;
+	}
+
+	const rtf = new Intl.RelativeTimeFormat('id-ID', { numeric: 'auto' });
+	function timeAgo(iso?: string): string {
+		const d = parseDate(iso);
+		if (!d) return '—';
+		const sec = Math.round((d.getTime() - now.getTime()) / 1000);
+		const abs = Math.abs(sec);
+		if (abs < 60) return 'baru saja';
+		if (abs < 3600) return rtf.format(Math.round(sec / 60), 'minute');
+		if (abs < 86400) return rtf.format(Math.round(sec / 3600), 'hour');
+		if (abs < 86400 * 7) return rtf.format(Math.round(sec / 86400), 'day');
+		return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+	}
+
+	// ── Filter rentang waktu & pembanding periode sebelumnya ──
+	const datedSessions = $derived(
+		sessions
+			.map((s) => ({ s, d: parseDate(s.createdAt) }))
+			.filter((x): x is { s: SessionSummary; d: Date } => x.d !== null)
+	);
+
+	const periodBounds = $derived.by(() => {
+		const end = new Date(startOfDay(now));
+		end.setDate(end.getDate() + 1);
+		if (rangePreset === 'all') {
+			return {
+				start: null as Date | null,
+				end,
+				prevStart: null as Date | null,
+				prevEnd: null as Date | null
+			};
+		}
+		const days = currentRange.days;
+		const start = new Date(end);
+		start.setDate(start.getDate() - days);
+		const prevEnd = new Date(start);
+		const prevStart = new Date(prevEnd);
+		prevStart.setDate(prevStart.getDate() - days);
+		return { start, end, prevStart, prevEnd };
 	});
 
-	const timelapseCount = $derived(sessions.filter((s) => s.hasGif || s.hasVideo).length);
-	const timelapsePct = $derived(loadedCount ? Math.round((timelapseCount / loadedCount) * 100) : 0);
+	const currentSessions = $derived.by(() => {
+		const { start, end } = periodBounds;
+		if (!start) return datedSessions;
+		return datedSessions.filter(({ d }) => d >= start && d < end);
+	});
 
-	const perDay7 = $derived.by(() => {
-		const now = startOfLocalDay(new Date());
-		const days: { key: string; label: string; value: number }[] = [];
-		const map = new Map<string, number>();
-		for (let i = 6; i >= 0; i--) {
-			const d = new Date(now);
+	const priorSessions = $derived.by(() => {
+		const { prevStart, prevEnd } = periodBounds;
+		if (!prevStart || !prevEnd) return [];
+		return datedSessions.filter(({ d }) => d >= prevStart && d < prevEnd);
+	});
+
+	// ── Bucket waktu ──
+	const dailyBuckets = $derived.by(() => {
+		const days = rangePreset === 'all' ? 30 : currentRange.days;
+		const today = startOfDay(now);
+		const out: { key: string; label: string; sub: string }[] = [];
+		for (let i = days - 1; i >= 0; i--) {
+			const d = new Date(today);
 			d.setDate(d.getDate() - i);
-			const k = dayKey(d);
-			map.set(k, 0);
-			days.push({ key: k, label: `${DAY_NAMES[d.getDay()]} ${d.getDate()}`, value: 0 });
+			const short = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+			out.push({
+				key: dayKey(d),
+				label: short,
+				sub: `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+			});
 		}
-		for (const s of sessions) {
-			const d = parseDate(s.createdAt);
-			if (!d) continue;
-			const k = dayKey(startOfLocalDay(d));
-			if (map.has(k)) map.set(k, (map.get(k) || 0) + 1);
-		}
-		return days.map((x) => ({ ...x, value: map.get(x.key) || 0 }));
+		return out;
 	});
 
-	const perWeek8 = $derived.by(() => {
-		const thisWeek = startOfLocalWeek(new Date());
-		const weeks: { key: string; label: string; sub: string; value: number }[] = [];
-		const map = new Map<string, number>();
-		for (let i = 7; i >= 0; i--) {
+	const weeklyBuckets = $derived.by(() => {
+		const thisWeek = startOfWeek(now);
+		const count = rangePreset === '7d' ? 4 : 8;
+		const out: { key: string; label: string; sub: string }[] = [];
+		for (let i = count - 1; i >= 0; i--) {
 			const start = new Date(thisWeek);
 			start.setDate(start.getDate() - i * 7);
 			const end = new Date(start);
 			end.setDate(end.getDate() + 6);
-			const k = dayKey(start);
-			map.set(k, 0);
-			const startLabel = `${start.getDate()} ${MONTH_NAMES[start.getMonth()]}`;
-			const endLabel = `${end.getDate()} ${MONTH_NAMES[end.getMonth()]}`;
-			weeks.push({
-				key: k,
-				label: startLabel,
-				sub: `${startLabel} – ${endLabel}`,
-				value: 0
-			});
+			const sLab = `${MONTHS[start.getMonth()]} ${start.getDate()}`;
+			const eLab = `${MONTHS[end.getMonth()]} ${end.getDate()}`;
+			out.push({ key: dayKey(start), label: sLab, sub: `${sLab} – ${eLab}` });
 		}
-		for (const s of sessions) {
-			const d = parseDate(s.createdAt);
-			if (!d) continue;
-			const k = dayKey(startOfLocalWeek(d));
-			if (map.has(k)) map.set(k, (map.get(k) || 0) + 1);
-		}
-		return weeks.map((x) => ({ ...x, value: map.get(x.key) || 0 }));
+		return out;
 	});
 
-	const formatDist = $derived.by(() => {
-		const counts = new Map<string, number>();
-		for (const s of sessions) {
-			const key = (s.formatId || s.templateKey || 'Tanpa format').trim() || 'Tanpa format';
-			counts.set(key, (counts.get(key) || 0) + 1);
-		}
-		const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-		const top = sorted.slice(0, 6).map(([label, value]) => ({ label, value }));
-		const rest = sorted.slice(6).reduce((sum, [, v]) => sum + v, 0);
-		if (rest > 0) top.push({ label: 'Lainnya', value: rest });
-		return top;
-	});
+	const hourlyBuckets = $derived(
+		Array.from({ length: 24 }, (_, h) => {
+			const hh = String(h).padStart(2, '0');
+			return { key: hh, label: hh, sub: `Pukul ${hh}.00 – ${hh}.59` };
+		})
+	);
 
-	const photoDist = $derived.by(() => {
-		const buckets = new Map<number, number>();
-		for (let i = 1; i <= 6; i++) buckets.set(i, 0);
-		for (const s of sessions) {
-			const n = Math.round(Number(s.photoCount));
-			if (Number.isFinite(n) && n >= 1 && n <= 6) buckets.set(n, (buckets.get(n) || 0) + 1);
+	// ── KPI Utama + Sparklines ──
+	function compareText(cur: number, prev: number): { text: string; tone: 'up' | 'down' | 'none' } {
+		if (rangePreset === 'all' || prev === 0) {
+			return { text: '— Belum ada data sebelumnya', tone: 'none' };
 		}
-		return [1, 2, 3, 4, 5, 6].map((n) => ({ label: `${n} foto`, value: buckets.get(n) || 0 }));
-	});
-
-	const outputSegs = $derived.by(() => {
-		let video = 0;
-		let gifOnly = 0;
-		let none = 0;
-		for (const s of sessions) {
-			if (s.hasVideo) video++;
-			else if (s.hasGif) gifOnly++;
-			else none++;
-		}
-		return [
-			{ label: 'Video', value: video, color: '#2563eb' },
-			{ label: 'GIF saja', value: gifOnly, color: '#d97706' },
-			{ label: 'Tanpa timelapse', value: none, color: '#78716c' }
-		];
-	});
-
-	const perHour = $derived.by(() => {
-		const buckets = Array.from({ length: 24 }, (_, h) => ({
-			label: String(h).padStart(2, '0'),
-			value: 0
-		}));
-		for (const s of sessions) {
-			const d = parseDate(s.createdAt);
-			if (!d) continue;
-			buckets[d.getHours()].value++;
-		}
-		return buckets;
-	});
-
-	const trendView = $derived.by(() => {
-		if (activeTrendTab === 'hari') {
-			return {
-				items: perDay7,
-				sub: '7 hari terakhir (termasuk hari ini), waktu lokal.',
-				label: 'Jumlah sesi per hari, 7 hari terakhir',
-				titleId: 'chart-trend-day'
-			};
-		}
-		if (activeTrendTab === 'jam') {
-			return {
-				items: perHour,
-				sub: 'Pola jam pemotretan dari sesi termuat (00–23), waktu lokal.',
-				label: 'Distribusi sesi per jam dalam sehari',
-				titleId: 'chart-trend-hour'
-			};
-		}
+		const pct = Math.round(((cur - prev) / prev) * 100);
+		if (pct === 0) return { text: '0% vs periode sebelumnya', tone: 'none' };
 		return {
-			items: perWeek8,
-			sub: '8 minggu terakhir (Senin–Minggu), label = tanggal mulai minggu.',
-			label: 'Jumlah sesi per minggu, 8 minggu terakhir',
-			titleId: 'chart-trend-week'
+			text: `${pct > 0 ? '+' : ''}${pct}% vs periode sebelumnya`,
+			tone: pct > 0 ? 'up' : 'down'
 		};
-	});
-
-	const trendTotal = $derived(trendView.items.reduce((sum, i) => sum + i.value, 0));
-
-	function onTrendKeydown(e: KeyboardEvent, id: TrendTab) {
-		const i = TREND_TABS.findIndex((t) => t.id === id);
-		let next = i;
-		if (e.key === 'ArrowRight') next = (i + 1) % TREND_TABS.length;
-		else if (e.key === 'ArrowLeft') next = (i - 1 + TREND_TABS.length) % TREND_TABS.length;
-		else if (e.key === 'Home') next = 0;
-		else if (e.key === 'End') next = TREND_TABS.length - 1;
-		else return;
-		e.preventDefault();
-		activeTrendTab = TREND_TABS[next].id;
-		document.getElementById(`trend-tab-${TREND_TABS[next].id}`)?.focus();
 	}
 
-	onMount(async () => {
-		try {
-			frames = await listFrames();
-		} catch {
-			frames = [];
-		} finally {
-			framesLoading = false;
+	const curTotalSessions = $derived(currentSessions.length);
+	const prevTotalSessions = $derived(priorSessions.length);
+
+	const curTotalPhotos = $derived(
+		currentSessions.reduce((sum, { s }) => sum + (Number(s.photoCount) || 0), 0)
+	);
+	const prevTotalPhotos = $derived(
+		priorSessions.reduce((sum, { s }) => sum + (Number(s.photoCount) || 0), 0)
+	);
+
+	const curAvgPhotos = $derived(curTotalSessions ? curTotalPhotos / curTotalSessions : 0);
+	const prevAvgPhotos = $derived(prevTotalSessions ? prevTotalPhotos / prevTotalSessions : 0);
+
+	const topFrameSizeList = $derived.by(() => {
+		const map = new Map<string, { spec: string; sessions: number; photos: number }>();
+		for (const { s } of currentSessions) {
+			const info = resolveFrameSizeInfo(s);
+			const prev = map.get(info.label) ?? { spec: info.spec, sessions: 0, photos: 0 };
+			prev.sessions += 1;
+			prev.photos += Number(s.photoCount) || 0;
+			map.set(info.label, prev);
 		}
-		sessionsLoading = true;
-		sessionsError = null;
-		try {
-			const res = await fetch(`/api/gallery?list=1&limit=${LIMIT}`);
-			if (!res.ok) throw new Error('API tidak tersedia');
-			const data = (await res.json()) as { sessions?: SessionSummary[] };
-			sessions = Array.isArray(data.sessions) ? data.sessions : [];
-		} catch (e) {
-			sessions = [];
-			sessionsError =
-				e instanceof Error
-					? 'Data sesi tidak terbaca (butuh Node + disk .gallery_cache).'
-					: 'Data sesi tidak terbaca.';
-		} finally {
-			sessionsLoading = false;
-		}
+		return [...map.entries()]
+			.sort((a, b) => b[1].sessions - a[1].sessions || b[1].photos - a[1].photos)
+			.slice(0, 6)
+			.map(([label, st]) => ({
+				label,
+				spec: st.spec,
+				sessions: st.sessions,
+				photos: st.photos,
+				pct: curTotalSessions ? Math.round((st.sessions / curTotalSessions) * 100) : 0
+			}));
 	});
 
-	const frameCount = $derived(frames.length);
+	const topFrameSize = $derived(topFrameSizeList[0] ?? null);
+
+	const printStat = $derived(queueSummary.print ?? { total: 0, pending: 0, failed: 0, done: 0 });
+	const cloudStat = $derived(
+		queueSummary['cloud-sync'] ?? { total: 0, pending: 0, failed: 0, done: 0 }
+	);
+	const uploadStat = $derived(queueSummary.upload ?? { total: 0, pending: 0, failed: 0, done: 0 });
+
+	const dSess = $derived(compareText(curTotalSessions, prevTotalSessions));
+	const dPhoto = $derived(compareText(curTotalPhotos, prevTotalPhotos));
+	const dAvg = $derived(compareText(curAvgPhotos, prevAvgPhotos));
+	const pBadge = $derived(queuePill(printStat));
+	const cBadge = $derived(queuePill(cloudStat));
+	const uBadge = $derived(queuePill(uploadStat));
+
+	const sparkSessions = $derived.by(() => {
+		const map = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		for (const { d } of currentSessions) {
+			const k = dayKey(startOfDay(d));
+			if (map.has(k)) map.set(k, (map.get(k) ?? 0) + 1);
+		}
+		return dailyBuckets.map((b) => map.get(b.key) ?? 0);
+	});
+
+	const sparkPhotos = $derived.by(() => {
+		const map = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		for (const { s, d } of currentSessions) {
+			const k = dayKey(startOfDay(d));
+			if (map.has(k)) map.set(k, (map.get(k) ?? 0) + (Number(s.photoCount) || 0));
+		}
+		return dailyBuckets.map((b) => map.get(b.key) ?? 0);
+	});
+
+	const sparkAvgPhotos = $derived.by(() => {
+		const cnt = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		const sum = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		for (const { s, d } of currentSessions) {
+			const k = dayKey(startOfDay(d));
+			if (!cnt.has(k)) continue;
+			cnt.set(k, (cnt.get(k) ?? 0) + 1);
+			sum.set(k, (sum.get(k) ?? 0) + (Number(s.photoCount) || 0));
+		}
+		return dailyBuckets.map((b) => {
+			const c = cnt.get(b.key) ?? 0;
+			return c ? Number(((sum.get(b.key) ?? 0) / c).toFixed(2)) : 0;
+		});
+	});
+
+	const sparkTopSize = $derived.by(() => {
+		const topLabel = topFrameSize?.label;
+		const map = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		if (!topLabel) return dailyBuckets.map(() => 0);
+		for (const { s, d } of currentSessions) {
+			if (frameSizeLabel(s) !== topLabel) continue;
+			const k = dayKey(startOfDay(d));
+			if (map.has(k)) map.set(k, (map.get(k) ?? 0) + 1);
+		}
+		return dailyBuckets.map((b) => map.get(b.key) ?? 0);
+	});
+
+	function queueSpark(type: 'print' | 'cloud-sync'): number[] {
+		const map = new Map(dailyBuckets.map((b) => [b.key, 0]));
+		for (const q of queueItems) {
+			if (q.type !== type || q.status !== 'done') continue;
+			const d = parseDate(q.createdAt);
+			if (!d) continue;
+			const k = dayKey(startOfDay(d));
+			if (map.has(k)) map.set(k, (map.get(k) ?? 0) + 1);
+		}
+		return dailyBuckets.map((b) => map.get(b.key) ?? 0);
+	}
+
+	const sparkPrint = $derived(queueSpark('print'));
+	const sparkCloud = $derived(queueSpark('cloud-sync'));
+
+	// ── Builder Multi-Series generik ──
+	function dimensionOf(s: SessionSummary, group: ExploreGroup): string {
+		if (group === 'photoCount') return photoBucketLabel(s);
+		if (group === 'template') return templateLabel(s);
+		return frameSizeLabel(s);
+	}
+
+	function metricValue(s: SessionSummary, metric: ExploreMetric): number {
+		if (metric === 'photos') return Number(s.photoCount) || 0;
+		return 1;
+	}
+
+	function bucketKeyFor(d: Date, rollup: ExploreRollup): string {
+		if (rollup === 'hourly') return String(d.getHours()).padStart(2, '0');
+		if (rollup === 'weekly') return dayKey(startOfWeek(d));
+		return dayKey(startOfDay(d));
+	}
+
+	function buildGroupedSeries(opts: {
+		group: ExploreGroup;
+		metric: ExploreMetric;
+		rollup: ExploreRollup;
+		topN: number;
+		sortBy?: ExploreSort;
+	}): {
+		buckets: { key: string; label: string; sub: string }[];
+		series: SeriesDef[];
+		table: {
+			key: string;
+			label: string;
+			color: string;
+			min: number;
+			max: number;
+			avg: number;
+			sum: number;
+			pct: number;
+		}[];
+		grandTotal: number;
+	} {
+		const buckets =
+			opts.rollup === 'hourly'
+				? hourlyBuckets
+				: opts.rollup === 'weekly'
+					? weeklyBuckets
+					: dailyBuckets;
+		const keyToIdx = new Map(buckets.map((b, i) => [b.key, i]));
+
+		const byGroup = new Map<string, number[]>();
+		for (const { s, d } of currentSessions) {
+			const idx = keyToIdx.get(bucketKeyFor(d, opts.rollup));
+			if (idx === undefined) continue;
+			const g = dimensionOf(s, opts.group);
+			let arr = byGroup.get(g);
+			if (!arr) {
+				arr = new Array(buckets.length).fill(0);
+				byGroup.set(g, arr);
+			}
+			arr[idx] += metricValue(s, opts.metric);
+		}
+
+		const rowsRaw = [...byGroup.entries()].map(([label, values]) => {
+			const sum = values.reduce((a, b) => a + b, 0);
+			const min = values.length ? Math.min(...values) : 0;
+			const max = values.length ? Math.max(...values) : 0;
+			const avg = values.length ? sum / values.length : 0;
+			return { key: label, label, values, min, max, avg, sum };
+		});
+
+		const grandTotal = rowsRaw.reduce((a, r) => a + r.sum, 0);
+		const sortBy = opts.sortBy ?? 'sum';
+		rowsRaw.sort((a, b) => b[sortBy] - a[sortBy] || b.sum - a.sum);
+
+		const sliced = opts.topN > 0 ? rowsRaw.slice(0, opts.topN) : rowsRaw;
+		const series: SeriesDef[] = sliced.map((r, i) => ({
+			key: r.key,
+			label: r.label,
+			color: PALETTE[i % PALETTE.length],
+			values: r.values
+		}));
+
+		const table = sliced.map((r, i) => ({
+			key: r.key,
+			label: r.label,
+			color: PALETTE[i % PALETTE.length],
+			min: r.min,
+			max: r.max,
+			avg: r.avg,
+			sum: r.sum,
+			pct: grandTotal ? (r.sum / grandTotal) * 100 : 0
+		}));
+
+		return { buckets, series, table, grandTotal };
+	}
+
+	// ── Data Ringkasan ──
+	const recentList = $derived(currentSessions.slice(0, 5).map((x) => x.s));
+
+	const ovPhotosByPack = $derived(
+		buildGroupedSeries({ group: 'photoCount', metric: 'photos', rollup: 'daily', topN: 6 })
+	);
+	const ovSessionsBySize = $derived(
+		buildGroupedSeries({ group: 'frameSize', metric: 'sessions', rollup: 'daily', topN: 6 })
+	);
+	const ovSessionsByPack = $derived(
+		buildGroupedSeries({ group: 'photoCount', metric: 'sessions', rollup: 'daily', topN: 6 })
+	);
+	const ovPhotosByHour = $derived(
+		buildGroupedSeries({ group: 'frameSize', metric: 'photos', rollup: 'hourly', topN: 6 })
+	);
+
+	// ── Data Tab Tren ──
+	const trendSizeData = $derived(
+		buildGroupedSeries({
+			group: 'frameSize',
+			metric: trendMetricSize,
+			rollup: 'daily',
+			topN: 6
+		})
+	);
+	const trendPhotoData = $derived(
+		buildGroupedSeries({
+			group: 'photoCount',
+			metric: trendMetricPhoto,
+			rollup: 'daily',
+			topN: 6
+		})
+	);
+	const trendTemplateData = $derived(
+		buildGroupedSeries({
+			group: 'template',
+			metric: trendMetricTemplate,
+			rollup: 'daily',
+			topN: 5
+		})
+	);
+
+	function computeTrendsDelta(group: ExploreGroup, metric: ExploreMetric) {
+		if (!priorSessions.length) return [];
+		const curMap = new Map<string, number>();
+		const prevMap = new Map<string, number>();
+		for (const { s } of currentSessions) {
+			const g = dimensionOf(s, group);
+			curMap.set(g, (curMap.get(g) ?? 0) + metricValue(s, metric));
+		}
+		for (const { s } of priorSessions) {
+			const g = dimensionOf(s, group);
+			prevMap.set(g, (prevMap.get(g) ?? 0) + metricValue(s, metric));
+		}
+		const keys = new Set([...curMap.keys(), ...prevMap.keys()]);
+		return [...keys]
+			.map((label) => {
+				const cur = curMap.get(label) ?? 0;
+				const prev = prevMap.get(label) ?? 0;
+				const diff = cur - prev;
+				const pct = prev > 0 ? Math.round((diff / prev) * 100) : cur > 0 ? 100 : 0;
+				return { label, cur, prev, diff, pct };
+			})
+			.filter((x) => x.diff !== 0)
+			.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+			.slice(0, 4);
+	}
+
+	const sizeMovers = $derived(computeTrendsDelta('frameSize', trendMetricSize));
+	const photoMovers = $derived(computeTrendsDelta('photoCount', trendMetricPhoto));
+	const templateMovers = $derived(computeTrendsDelta('template', trendMetricTemplate));
+
+	// ── Data Tab Eksplorasi ──
+	const exploreData = $derived(
+		buildGroupedSeries({
+			group: exGroup,
+			metric: exMetric,
+			rollup: exRollup,
+			topN: exTop,
+			sortBy: exSort
+		})
+	);
+
+	const exploreUnit = $derived(exMetric === 'photos' ? 'foto' : 'sesi');
+
+	const exploreDimLabel = $derived(
+		exGroup === 'photoCount'
+			? 'Paket Foto'
+			: exGroup === 'template'
+				? 'Template Strip'
+				: 'Ukuran Frame'
+	);
+
+	function openExplore(
+		group: ExploreGroup,
+		metric: ExploreMetric = 'photos',
+		rollup: ExploreRollup = 'daily'
+	): void {
+		exGroup = group;
+		exMetric = metric;
+		exRollup = rollup;
+		activeTab = 'eksplorasi';
+	}
+
+	function queuePill(stat: QueueStat): { label: string; cls: string } {
+		if (stat.failed > 0) return { label: `${stat.failed} gagal`, cls: 'd-pill d-pill-err' };
+		if (stat.pending > 0) return { label: `${stat.pending} tertunda`, cls: 'd-pill d-pill-warn' };
+		if (stat.total > 0) return { label: 'Normal', cls: 'd-pill d-pill-ok' };
+		return { label: 'Kosong', cls: 'd-pill' };
+	}
+
+	async function loadAll(): Promise<void> {
+		loading = true;
+		error = null;
+		const [framesRes, queueRes, galleryRes] = await Promise.all([
+			listFrames().catch(() => []),
+			fetch('/api/queue?limit=200')
+				.then((r) => (r.ok ? r.json() : null))
+				.catch(() => null),
+			fetch(`/api/gallery?list=1&limit=${LIMIT}`)
+				.then(async (r) => {
+					if (!r.ok) throw new Error('API galeri tidak tersedia');
+					return (await r.json()) as { sessions?: SessionSummary[] };
+				})
+				.catch(() => null),
+			loadCustomFrameSizes(true).catch(() => undefined),
+			loadCustomAssets(true).catch(() => undefined)
+		]);
+
+		frameCount = framesRes.length;
+		if (queueRes) {
+			const q = queueRes as {
+				items?: QueueItem[];
+				summary?: Record<string, QueueStat>;
+			};
+			queueItems = Array.isArray(q.items) ? q.items : [];
+			queueSummary = q.summary ?? {};
+		} else {
+			queueItems = [];
+			queueSummary = {};
+		}
+
+		if (galleryRes) {
+			sessions = Array.isArray(galleryRes.sessions) ? galleryRes.sessions : [];
+		} else {
+			sessions = [];
+			error = 'Data sesi tidak terbaca. Pastikan aplikasi berjalan pada runtime Node.';
+		}
+
+		now = new Date();
+		loading = false;
+	}
+
+	onMount(() => {
+		void loadAll();
+		const t = setInterval(() => (now = new Date()), 60_000);
+		return () => clearInterval(t);
+	});
 </script>
 
-<div class="dash-page">
-	<header class="dash-head">
-		<p class="eyebrow font-mono">ADMIN · DASHBOARD</p>
-		<h1 class="dash-title font-display">Dashboard</h1>
-		<p class="dash-sub">
-			Ringkasan sesi pemotretan dari server (<span class="font-mono">.gallery_cache</span>, Node +
-			disk tulis). Grafik berdasarkan maks. {LIMIT} sesi terbaru yang termuat.
-		</p>
+<div class="or-page">
+	<!-- ═══ Header Aktivitas bergaya OpenRouter ═══ -->
+	<header class="or-head">
+		<div>
+			<h1 class="or-title">Aktivitas</h1>
+			<p class="or-sub">
+				Pantau volume foto, ukuran frame terpopuler, riwayat sesi, cetak, dan sinkronisasi cloud
+			</p>
+		</div>
+
+		<div class="or-controls">
+			<span class="or-ctrl-chip" title="Zona waktu lokal">
+				<Globe size={13} />
+				<span class="d-num">{tzLabel}</span>
+			</span>
+
+			<button
+				type="button"
+				class="or-ctrl-icon"
+				onclick={loadAll}
+				disabled={loading}
+				aria-label="Muat ulang data"
+				title="Muat ulang data"
+			>
+				<span class="or-spin" class:is-spinning={loading}><RefreshCw size={14} /></span>
+			</button>
+
+			<label class="or-range-wrap">
+				<span class="or-range-tag">{currentRange.short}</span>
+				<select class="or-range-select" bind:value={rangePreset} aria-label="Pilih rentang waktu">
+					{#each RANGE_OPTIONS as opt (opt.id)}
+						<option value={opt.id}>{opt.label}</option>
+					{/each}
+				</select>
+			</label>
+		</div>
 	</header>
 
-	<section class="dash-stats" aria-label="Indikator sesi">
-		<div class="card border border-base-300 bg-base-200">
-			<div class="card-body gap-1">
-				<p class="stat-label font-mono">TOTAL SESI (TERMUAT)</p>
-				<p class="font-display stat-value">{sessionsLoading ? '…' : loadedCount}</p>
-				<p class="stat-hint">Maks. {LIMIT} sesi terbaru dari cache server.</p>
-			</div>
-		</div>
-		<div class="card border border-base-300 bg-base-200">
-			<div class="card-body gap-1">
-				<p class="stat-label font-mono">HARI INI</p>
-				<p class="font-display stat-value">{sessionsLoading ? '…' : todayCount}</p>
-				<p class="stat-hint">Sesi dengan tanggal lokal hari ini.</p>
-			</div>
-		</div>
-		<div class="card border border-base-300 bg-base-200">
-			<div class="card-body gap-1">
-				<p class="stat-label font-mono">7 HARI TERAKHIR</p>
-				<p class="font-display stat-value">{sessionsLoading ? '…' : last7Count}</p>
-				<p class="stat-hint">Termasuk hari ini (rolling).</p>
-			</div>
-		</div>
-		<div class="card border border-base-300 bg-base-200">
-			<div class="card-body gap-1">
-				<p class="stat-label font-mono">OUTPUT TIMELAPSE</p>
-				<p class="font-display stat-value">{sessionsLoading ? '…' : `${timelapsePct}%`}</p>
-				<p class="stat-hint">
-					{sessionsLoading ? '—' : `${timelapseCount} dari ${loadedCount} sesi punya GIF/video.`}
-				</p>
-			</div>
-		</div>
-	</section>
-
-	{#if sessionsError}
-		<div class="panel alert-panel" role="status">
-			<p class="panel-note">{sessionsError} Grafik sesi tidak ditampilkan.</p>
-		</div>
-	{:else}
-		<section class="charts-grid" aria-label="Grafik sesi pemotretan">
-			<div class="panel span-2">
-				<div class="panel-head panel-head-tabs">
-					<div>
-						<h2 class="section-title font-mono">AKTIVITAS SESI</h2>
-						<p class="panel-sub">{trendView.sub}</p>
-					</div>
-					<div class="trend-tabs" role="tablist" aria-label="Rentang grafik aktivitas sesi">
-						{#each TREND_TABS as tab (tab.id)}
-							<button
-								type="button"
-								id={`trend-tab-${tab.id}`}
-								class="trend-tab"
-								class:active={activeTrendTab === tab.id}
-								role="tab"
-								aria-selected={activeTrendTab === tab.id}
-								aria-controls="trend-panel"
-								tabindex={activeTrendTab === tab.id ? 0 : -1}
-								onclick={() => (activeTrendTab = tab.id)}
-								onkeydown={(e) => onTrendKeydown(e, tab.id)}
-							>
-								{tab.label}
-							</button>
-						{/each}
-					</div>
+	<!-- ═══ Banner Info Opsional (bisa ditutup) ═══ -->
+	{#if showCallout && activeTab === 'ringkasan'}
+		<div class="or-callout" role="region" aria-label="Informasi integrasi studio">
+			<div class="or-callout-left">
+				<div class="or-callout-icons" aria-hidden="true">
+					<span class="or-ci"><Frame size={13} /></span>
+					<span class="or-ci"><Printer size={13} /></span>
+					<span class="or-ci"><Cloud size={13} /></span>
 				</div>
-				<div
-					class="panel-body"
-					id="trend-panel"
-					role="tabpanel"
-					aria-labelledby={`trend-tab-${activeTrendTab}`}
+				<div class="or-callout-copy">
+					<p class="or-callout-title">
+						Kelola frame Canva, atur ukuran cetak, dan pantau antrean studio
+					</p>
+					<p class="or-callout-desc">
+						Gunakan tab di bawah untuk meninjau tren ukuran frame, eksplorasi jumlah foto, hingga
+						status cetak dan cloud.
+					</p>
+				</div>
+			</div>
+			<div class="or-callout-right">
+				<a class="d-btn d-btn-sm" href="/dashboard/assets/frames">Buka Frame Studio</a>
+				<button
+					type="button"
+					class="or-dismiss"
+					onclick={() => (showCallout = false)}
+					aria-label="Tutup banner"
 				>
-					{#if sessionsLoading}
-						<p class="panel-note">Memuat grafik…</p>
-					{:else if trendTotal === 0}
-						<p class="panel-note">
-							Tidak ada sesi pada rentang ini (dari maks. {LIMIT} sesi terbaru).
-						</p>
-					{:else}
-						<VBarChart
-							items={trendView.items}
-							titleId={trendView.titleId}
-							label={trendView.label}
-						/>
-					{/if}
+					<X size={15} />
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	<!-- ═══ Tab Section Garis Bawah ═══ -->
+	<div class="or-tabs" role="tablist" aria-label="Bagian halaman aktivitas">
+		{#each MAIN_TABS as tab (tab.id)}
+			<button
+				type="button"
+				role="tab"
+				class="or-tab"
+				class:is-active={activeTab === tab.id}
+				aria-selected={activeTab === tab.id}
+				onclick={() => (activeTab = tab.id)}
+			>
+				{tab.label}
+			</button>
+		{/each}
+	</div>
+
+	{#if error}
+		<div class="d-banner d-banner-warn" role="alert"><span>{error}</span></div>
+	{/if}
+
+	<!-- ══════════════════════════════════════════════════
+	     TAB 1: RINGKASAN (KPI → Daftar Terpisah → Grafik Terpisah)
+	     ══════════════════════════════════════════════════ -->
+	{#if activeTab === 'ringkasan'}
+		<!-- 1A. 6 Kartu KPI Seimbang (3×2 desktop) + Sparkline -->
+		<section class="or-kpi-grid" aria-label="Metrik utama">
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Total Foto</span>
+					<strong class="or-kpi-val d-num">{loading ? '—' : curTotalPhotos}</strong>
+					<span class="or-kpi-delta is-{dPhoto.tone}">{dPhoto.text}</span>
+				</div>
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkPhotos} id="sp-photo" color="#84cc16" />
 				</div>
 			</div>
 
-			<div class="panel">
-				<div class="panel-head">
-					<div>
-						<h2 class="section-title font-mono">DISTRIBUSI FORMAT</h2>
-						<p class="panel-sub">Berdasarkan formatId (fallback templateKey).</p>
-					</div>
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Total Sesi</span>
+					<strong class="or-kpi-val d-num">{loading ? '—' : curTotalSessions}</strong>
+					<span class="or-kpi-delta is-{dSess.tone}">{dSess.text}</span>
 				</div>
-				<div class="panel-body">
-					{#if sessionsLoading}
-						<p class="panel-note">Memuat grafik…</p>
-					{:else}
-						<HBarChart
-							items={formatDist}
-							titleId="chart-format"
-							label="Distribusi format sesi"
-							empty="Belum ada sesi."
-						/>
-					{/if}
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkSessions} id="sp-sess" color="#38bdf8" />
 				</div>
 			</div>
 
-			<div class="panel">
-				<div class="panel-head">
-					<div>
-						<h2 class="section-title font-mono">JUMLAH FOTO PER SESI</h2>
-						<p class="panel-sub">Distribusi 1–6 foto.</p>
-					</div>
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Rata-rata Foto / Sesi</span>
+					<strong class="or-kpi-val d-num">
+						{loading ? '—' : curAvgPhotos.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+					</strong>
+					<span class="or-kpi-delta is-{dAvg.tone}">{dAvg.text}</span>
 				</div>
-				<div class="panel-body">
-					{#if sessionsLoading}
-						<p class="panel-note">Memuat grafik…</p>
-					{:else}
-						<HBarChart
-							items={photoDist}
-							titleId="chart-photo-count"
-							label="Distribusi jumlah foto per sesi"
-							empty="Belum ada sesi."
-						/>
-					{/if}
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkAvgPhotos} id="sp-avg" color="#c084fc" />
 				</div>
 			</div>
 
-			<div class="panel">
-				<div class="panel-head">
-					<div>
-						<h2 class="section-title font-mono">KELENGKAPAN OUTPUT</h2>
-						<p class="panel-sub">Kategori eksklusif: Video / GIF saja / Tanpa timelapse.</p>
-					</div>
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Ukuran Frame Terlaris</span>
+					<strong class="or-kpi-val or-kpi-val-sm" title={topFrameSize?.label ?? '—'}>
+						{loading ? '—' : (topFrameSize?.label ?? 'Belum ada')}
+					</strong>
+					<span class="or-kpi-delta is-none d-num">
+						{#if topFrameSize}
+							{topFrameSize.sessions} sesi ({topFrameSize.pct}%) · {topFrameSize.photos} foto
+						{:else}
+							— Belum ada data
+						{/if}
+					</span>
 				</div>
-				<div class="panel-body">
-					{#if sessionsLoading}
-						<p class="panel-note">Memuat grafik…</p>
-					{:else}
-						<SegmentBar
-							segments={outputSegs}
-							titleId="chart-output"
-							label="Komposisi output timelapse sesi"
-						/>
-					{/if}
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkTopSize} id="sp-topsize" color="#f472b6" />
+				</div>
+			</div>
+
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Cetak Selesai</span>
+					<strong class="or-kpi-val d-num">{loading ? '—' : printStat.done}</strong>
+					<span class="or-kpi-delta is-none d-num">
+						{printStat.pending} tertunda · {printStat.failed} gagal
+					</span>
+				</div>
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkPrint} id="sp-print" color="#fb923c" />
+				</div>
+			</div>
+
+			<div class="or-kpi-card">
+				<div class="or-kpi-left">
+					<span class="or-kpi-label">Sinkronisasi Cloud</span>
+					<strong class="or-kpi-val d-num">{loading ? '—' : cloudStat.done}</strong>
+					<span class="or-kpi-delta is-none d-num">
+						{cloudStat.pending} tertunda · {cloudStat.failed} gagal
+					</span>
+				</div>
+				<div class="or-kpi-spark">
+					<Sparkline values={sparkCloud} id="sp-cloud" color="#34d399" />
 				</div>
 			</div>
 		</section>
-	{/if}
 
-	<section aria-label="Akses cepat">
-		<h2 class="section-title font-mono">MENU</h2>
-		<div class="quick-grid">
-			<a class="quick-card" href="/dashboard/sessions"
-				><p class="quick-name">Session</p>
-				<p class="quick-desc">Riwayat sesi dan output foto.</p></a
-			>
-			<a class="quick-card" href="/dashboard/gallery"
-				><p class="quick-name">Gallery</p>
-				<p class="quick-desc">Kelola sesi via QR dan tautan.</p></a
-			>
-			<a class="quick-card" href="/dashboard/assets"
-				><p class="quick-name">Asset</p>
-				<p class="quick-desc">Frame, size, sticker, filter, AR.</p></a
-			>
-			<a class="quick-card" href="/dashboard/queue"
-				><p class="quick-name">Queue</p>
-				<p class="quick-desc">Print, cloud sync, upload.</p></a
-			>
-			<a class="quick-card" href="/dashboard/settings"
-				><p class="quick-name">Setting</p>
-				<p class="quick-desc">Tema, kamera, dan operasional.</p></a
-			>
+		<!-- 1B. Seksi Daftar (Terpisah bersih dari Grafik) -->
+		<section class="or-two-col" aria-label="Daftar ukuran frame terpopuler dan sesi terbaru">
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Ukuran Frame Terpopuler</h2>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('frameSize', 'sessions', 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				{#if loading}
+					<div class="or-pad"><div class="or-skel or-skel-list"></div></div>
+				{:else if topFrameSizeList.length === 0}
+					<p class="or-empty-inline">Belum ada sesi pada rentang waktu ini.</p>
+				{:else}
+					<ol class="or-rank-list">
+						{#each topFrameSizeList as item, idx (item.label)}
+							<li class="or-rank-row">
+								<span class="or-rank-num d-num">{idx + 1}</span>
+								<div class="or-rank-info">
+									<span class="or-rank-name">{item.label}</span>
+									<span class="or-rank-sub d-num">{item.spec} · {item.pct}% dari sesi</span>
+								</div>
+								<div class="or-rank-stat d-num">
+									<strong>{item.sessions} sesi</strong>
+									<span>{item.photos} foto</span>
+								</div>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Sesi Terbaru</h2>
+					<a class="or-explore-btn" href="/dashboard/sessions">
+						Lihat semua <ChevronRight size={13} />
+					</a>
+				</div>
+				{#if loading}
+					<div class="or-pad"><div class="or-skel or-skel-list"></div></div>
+				{:else if recentList.length === 0}
+					<p class="or-empty-inline">Belum ada riwayat pemotretan.</p>
+				{:else}
+					<ol class="or-rank-list">
+						{#each recentList as s, idx (s.id)}
+							<li class="or-rank-row">
+								<span class="or-rank-num d-num">{idx + 1}</span>
+								<a
+									class="or-rank-info or-row-link"
+									href="/dashboard/sessions?id={encodeURIComponent(s.id)}"
+								>
+									<span class="or-rank-name">
+										{frameSizeLabel(s)}
+										<span class="or-id-tag d-num">{shortId(s.id)}</span>
+									</span>
+									<span class="or-rank-sub">
+										{timeAgo(s.createdAt)} · {templateLabel(s)}
+									</span>
+								</a>
+								<div class="or-row-end">
+									<span class="d-pill d-num">{s.photoCount ?? 0} foto</span>
+									<a
+										class="or-ext"
+										href="/gallery/{encodeURIComponent(s.id)}"
+										target="_blank"
+										rel="noopener noreferrer"
+										title="Buka Galeri QR"
+										aria-label="Buka Galeri QR {s.id}"
+									>
+										<ExternalLink size={13} />
+									</a>
+								</div>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+			</article>
+		</section>
+
+		<!-- 1C. Seksi Grafik (Terpisah bersih di bawah Daftar) -->
+		<section class="or-two-col" aria-label="Grafik jumlah foto dan ukuran frame">
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Volume Foto Harian</h2>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('photoCount', 'photos', 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={ovPhotosByPack.buckets}
+						series={ovPhotosByPack.series}
+						titleId="ov-ch-photos"
+						label="Volume foto harian berdasarkan paket jumlah foto"
+						mode="bar"
+						height={215}
+						unit="foto"
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Ukuran Frame yang Digunakan</h2>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('frameSize', 'sessions', 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={ovSessionsBySize.buckets}
+						series={ovSessionsBySize.series}
+						titleId="ov-ch-size"
+						label="Sesi berdasarkan ukuran frame"
+						mode="bar"
+						height={215}
+						unit="sesi"
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Sesi berdasarkan Paket Jumlah Foto</h2>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('photoCount', 'sessions', 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={ovSessionsByPack.buckets}
+						series={ovSessionsByPack.series}
+						titleId="ov-ch-pack"
+						label="Sesi berdasarkan paket 1 sampai 6 foto"
+						mode="bar"
+						height={215}
+						unit="sesi"
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h2 class="or-card-title">Volume Foto per Jam</h2>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('frameSize', 'photos', 'hourly')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={ovPhotosByHour.buckets}
+						series={ovPhotosByHour.series}
+						titleId="ov-ch-hour"
+						label="Distribusi volume foto per jam"
+						mode="bar"
+						height={215}
+						unit="foto"
+					/>
+				</div>
+			</article>
+		</section>
+
+		<!-- ══════════════════════════════════════════════════
+		     TAB 2: TREN (Ukuran Frame · Paket Foto · Template)
+		     ══════════════════════════════════════════════════ -->
+	{:else if activeTab === 'tren'}
+		<!-- Seksi Tren 1: Ukuran Frame -->
+		<section class="or-trend-section">
+			<div class="or-sec-bar">
+				<h2 class="or-sec-title">Ukuran Frame</h2>
+				<select
+					class="or-mini-select"
+					bind:value={trendMetricSize}
+					aria-label="Metrik tren ukuran frame"
+				>
+					<option value="sessions">Jumlah Sesi</option>
+					<option value="photos">Total Foto</option>
+				</select>
+			</div>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">
+						{trendMetricSize === 'photos'
+							? 'Total foto per ukuran frame dari waktu ke waktu'
+							: 'Pemakaian ukuran frame dari waktu ke waktu'}
+					</h3>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('frameSize', trendMetricSize, 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={trendSizeData.buckets}
+						series={trendSizeData.series}
+						titleId="tr-ch-size"
+						label="Tren ukuran frame dari waktu ke waktu"
+						mode="line"
+						height={240}
+						allowToggleMode={true}
+						unit={trendMetricSize === 'photos' ? 'foto' : 'sesi'}
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">Perubahan Tren</h3>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('frameSize', trendMetricSize, 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				{#if sizeMovers.length === 0}
+					<p class="or-empty-inline">
+						Belum ada perubahan tren signifikan dibanding periode sebelumnya.
+					</p>
+				{:else}
+					<div class="or-movers">
+						{#each sizeMovers as m (m.label)}
+							<div class="or-mover-row">
+								<span class="or-mover-name">{m.label}</span>
+								<span class="or-mover-nums d-num">
+									{m.prev} → <strong>{m.cur}</strong>
+								</span>
+								<span
+									class="or-mover-badge d-num"
+									class:is-up={m.diff > 0}
+									class:is-down={m.diff < 0}
+								>
+									{#if m.diff > 0}
+										<TrendingUp size={12} />
+									{:else if m.diff < 0}
+										<TrendingDown size={12} />
+									{:else}
+										<Minus size={12} />
+									{/if}
+									{m.pct > 0 ? '+' : ''}{m.pct}%
+								</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</article>
+		</section>
+
+		<!-- Seksi Tren 2: Paket Jumlah Foto -->
+		<section class="or-trend-section">
+			<div class="or-sec-bar">
+				<h2 class="or-sec-title">Paket Jumlah Foto (1–6 Foto)</h2>
+				<select
+					class="or-mini-select"
+					bind:value={trendMetricPhoto}
+					aria-label="Metrik tren paket foto"
+				>
+					<option value="photos">Total Foto</option>
+					<option value="sessions">Jumlah Sesi</option>
+				</select>
+			</div>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">
+						{trendMetricPhoto === 'photos'
+							? 'Jumlah foto per paket dari waktu ke waktu'
+							: 'Pilihan paket foto dari waktu ke waktu'}
+					</h3>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('photoCount', trendMetricPhoto, 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={trendPhotoData.buckets}
+						series={trendPhotoData.series}
+						titleId="tr-ch-photo"
+						label="Tren paket jumlah foto dari waktu ke waktu"
+						mode="line"
+						height={240}
+						allowToggleMode={true}
+						unit={trendMetricPhoto === 'photos' ? 'foto' : 'sesi'}
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">Perubahan Tren</h3>
+				</div>
+				{#if photoMovers.length === 0}
+					<p class="or-empty-inline">
+						Belum ada perubahan tren signifikan dibanding periode sebelumnya.
+					</p>
+				{:else}
+					<div class="or-movers">
+						{#each photoMovers as m (m.label)}
+							<div class="or-mover-row">
+								<span class="or-mover-name">{m.label}</span>
+								<span class="or-mover-nums d-num">
+									{m.prev} → <strong>{m.cur}</strong>
+								</span>
+								<span
+									class="or-mover-badge d-num"
+									class:is-up={m.diff > 0}
+									class:is-down={m.diff < 0}
+								>
+									{m.pct > 0 ? '+' : ''}{m.pct}%
+								</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</article>
+		</section>
+
+		<!-- Seksi Tren 3: Template Strip -->
+		<section class="or-trend-section">
+			<div class="or-sec-bar">
+				<h2 class="or-sec-title">Template &amp; Gaya Strip</h2>
+				<select
+					class="or-mini-select"
+					bind:value={trendMetricTemplate}
+					aria-label="Metrik tren template"
+				>
+					<option value="sessions">Jumlah Sesi</option>
+					<option value="photos">Total Foto</option>
+				</select>
+			</div>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">Penggunaan template dari waktu ke waktu</h3>
+					<button
+						type="button"
+						class="or-explore-btn"
+						onclick={() => openExplore('template', trendMetricTemplate, 'daily')}
+					>
+						Eksplorasi <ChevronRight size={13} />
+					</button>
+				</div>
+				<div class="or-pad">
+					<MultiSeriesChart
+						buckets={trendTemplateData.buckets}
+						series={trendTemplateData.series}
+						titleId="tr-ch-template"
+						label="Tren template strip dari waktu ke waktu"
+						mode="line"
+						height={240}
+						allowToggleMode={true}
+						unit={trendMetricTemplate === 'photos' ? 'foto' : 'sesi'}
+					/>
+				</div>
+			</article>
+
+			<article class="d-card">
+				<div class="or-card-head">
+					<h3 class="or-card-title">Perubahan Tren</h3>
+				</div>
+				{#if templateMovers.length === 0}
+					<p class="or-empty-inline">
+						Belum ada perubahan tren signifikan dibanding periode sebelumnya.
+					</p>
+				{:else}
+					<div class="or-movers">
+						{#each templateMovers as m (m.label)}
+							<div class="or-mover-row">
+								<span class="or-mover-name">{m.label}</span>
+								<span class="or-mover-nums d-num">
+									{m.prev} → <strong>{m.cur}</strong>
+								</span>
+								<span
+									class="or-mover-badge d-num"
+									class:is-up={m.diff > 0}
+									class:is-down={m.diff < 0}
+								>
+									{m.pct > 0 ? '+' : ''}{m.pct}%
+								</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</article>
+		</section>
+
+		<!-- ══════════════════════════════════════════════════
+		     TAB 3: EKSPLORASI (Query Bar + Grafik Penuh + Tabel Rincian)
+		     ══════════════════════════════════════════════════ -->
+	{:else if activeTab === 'eksplorasi'}
+		<div class="or-query-bar" role="region" aria-label="Pengaturan eksplorasi data">
+			<div class="or-qgroup">
+				<select class="or-qselect" bind:value={exMetric} aria-label="Metrik">
+					<option value="photos">Total Foto</option>
+					<option value="sessions">Total Sesi</option>
+				</select>
+				<span class="or-qsep">berdasarkan</span>
+				<select class="or-qselect" bind:value={exGroup} aria-label="Kelompokkan berdasarkan">
+					<option value="frameSize">Ukuran Frame</option>
+					<option value="photoCount">Paket Foto</option>
+					<option value="template">Template Strip</option>
+				</select>
+			</div>
+
+			<div class="or-qgroup">
+				<span class="or-qsep">Rollup:</span>
+				<select class="or-qselect" bind:value={exRollup} aria-label="Interval rollup">
+					<option value="daily">Harian</option>
+					<option value="weekly">Mingguan</option>
+					<option value="hourly">Per Jam</option>
+				</select>
+			</div>
+
+			<div class="or-qgroup">
+				<span class="or-qsep">Top</span>
+				<select class="or-qselect" bind:value={exTop} aria-label="Jumlah baris teratas">
+					<option value={5}>5</option>
+					<option value={10}>10</option>
+					<option value={0}>Semua</option>
+				</select>
+				<span class="or-qsep">Urutkan:</span>
+				<select class="or-qselect" bind:value={exSort} aria-label="Urutkan berdasarkan">
+					<option value="sum">Total</option>
+					<option value="avg">Rata-rata</option>
+					<option value="max">Maksimum</option>
+				</select>
+			</div>
 		</div>
-	</section>
 
-	<section aria-label="Status frame">
-		<h2 class="section-title font-mono">FRAME</h2>
-		<p class="panel-note">
-			{framesLoading
-				? 'Memuat frame…'
-				: frameCount > 0
-					? `${frameCount} frame tersimpan di browser (IndexedDB).`
-					: 'Belum ada frame custom tersimpan.'}
-		</p>
-		<a class="btn btn-outline btn-sm" href="/dashboard/assets/frames">Buka Frame Studio</a>
-	</section>
+		<!-- Grafik Penuh -->
+		<article class="d-card">
+			<div class="or-pad">
+				<MultiSeriesChart
+					buckets={exploreData.buckets}
+					series={exploreData.series}
+					titleId="ex-main-chart"
+					label="Grafik eksplorasi data"
+					mode="bar"
+					height={275}
+					allowToggleMode={true}
+					unit={exploreUnit}
+				/>
+			</div>
+		</article>
+
+		<!-- Tabel Rincian Statistik Terpisah -->
+		<article class="d-card">
+			<div class="or-table-scroll">
+				<table class="or-table">
+					<thead>
+						<tr>
+							<th>{exploreDimLabel}</th>
+							<th class="is-right">Min</th>
+							<th class="is-right">Maks</th>
+							<th class="is-right">Rata-rata</th>
+							<th class="is-right">Total</th>
+							<th class="is-right">Periode Ini</th>
+							<th class="is-right">% dari Total</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#if exploreData.table.length === 0}
+							<tr>
+								<td colspan="7" class="or-table-empty">
+									Belum ada data pada rentang waktu yang dipilih.
+								</td>
+							</tr>
+						{:else}
+							{#each exploreData.table as row (row.key)}
+								<tr>
+									<td>
+										<span class="or-tbl-dim">
+											<span class="or-tbl-dot" style="background:{row.color}"></span>
+											<span>{row.label}</span>
+										</span>
+									</td>
+									<td class="is-right d-num">{row.min}</td>
+									<td class="is-right d-num">{row.max}</td>
+									<td class="is-right d-num">
+										{row.avg.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+									</td>
+									<td class="is-right d-num"><strong>{row.sum}</strong></td>
+									<td class="is-right d-num">{row.sum} {exploreUnit}</td>
+									<td class="is-right d-num">{row.pct.toFixed(1)}%</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+			<div class="or-table-foot d-num">
+				<span>{exploreData.table.length} baris</span>
+				<span>·</span>
+				<span>{currentRange.label}</span>
+				<span>·</span>
+				<span>Total {exploreData.grandTotal} {exploreUnit}</span>
+			</div>
+		</article>
+
+		<!-- ══════════════════════════════════════════════════
+		     TAB 4: OPERASIONAL (Antrean & Katalog Aset Terpisah)
+		     ══════════════════════════════════════════════════ -->
+	{:else}
+		<section class="or-trend-section">
+			<div class="or-sec-bar">
+				<h2 class="or-sec-title">Antrean &amp; Sinkronisasi</h2>
+				<a class="or-explore-btn" href="/dashboard/queue">
+					Buka Semua Antrean <ChevronRight size={13} />
+				</a>
+			</div>
+
+			<article class="d-card">
+				<div class="or-table-scroll">
+					<table class="or-table">
+						<thead>
+							<tr>
+								<th>Layanan Antrean</th>
+								<th class="is-right">Total</th>
+								<th class="is-right">Selesai</th>
+								<th class="is-right">Tertunda</th>
+								<th class="is-right">Gagal</th>
+								<th>Status</th>
+								<th class="is-right">Aksi</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>
+									<span class="or-tbl-dim">
+										<Printer size={15} />
+										<span>Antrean Cetak Frame</span>
+									</span>
+								</td>
+								<td class="is-right d-num">{printStat.total}</td>
+								<td class="is-right d-num">{printStat.done}</td>
+								<td class="is-right d-num">{printStat.pending}</td>
+								<td class="is-right d-num">{printStat.failed}</td>
+								<td><span class={pBadge.cls}>{pBadge.label}</span></td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/queue/print">
+										Kelola <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+
+							<tr>
+								<td>
+									<span class="or-tbl-dim">
+										<Cloud size={15} />
+										<span>Sinkronisasi Cloud</span>
+									</span>
+								</td>
+								<td class="is-right d-num">{cloudStat.total}</td>
+								<td class="is-right d-num">{cloudStat.done}</td>
+								<td class="is-right d-num">{cloudStat.pending}</td>
+								<td class="is-right d-num">{cloudStat.failed}</td>
+								<td><span class={cBadge.cls}>{cBadge.label}</span></td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/queue/cloud-sync">
+										Kelola <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+
+							<tr>
+								<td>
+									<span class="or-tbl-dim">
+										<Upload size={15} />
+										<span>Antrean Unggahan Aset</span>
+									</span>
+								</td>
+								<td class="is-right d-num">{uploadStat.total}</td>
+								<td class="is-right d-num">{uploadStat.done}</td>
+								<td class="is-right d-num">{uploadStat.pending}</td>
+								<td class="is-right d-num">{uploadStat.failed}</td>
+								<td><span class={uBadge.cls}>{uBadge.label}</span></td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/queue/upload">
+										Kelola <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</article>
+		</section>
+
+		<section class="or-trend-section">
+			<div class="or-sec-bar">
+				<h2 class="or-sec-title">Katalog Aset Studio</h2>
+				<a class="or-explore-btn" href="/dashboard/assets">
+					Buka Katalog <ChevronRight size={13} />
+				</a>
+			</div>
+
+			<article class="d-card">
+				<div class="or-table-scroll">
+					<table class="or-table">
+						<thead>
+							<tr>
+								<th>Jenis Aset</th>
+								<th>Keterangan</th>
+								<th class="is-right">Jumlah Kustom</th>
+								<th class="is-right">Aksi</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>
+									<span class="or-tbl-dim"><Frame size={15} /><span>Frame Studio</span></span>
+								</td>
+								<td class="or-tbl-muted">Template bingkai strip dari Canva (PNG/SVG)</td>
+								<td class="is-right d-num"><strong>{frameCount}</strong> frame</td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/assets/frames">
+										Buka <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+							<tr>
+								<td>
+									<span class="or-tbl-dim"><Ruler size={15} /><span>Ukuran Frame</span></span>
+								</td>
+								<td class="or-tbl-muted">Format kertas cetak 300 DPI &amp; rasio digital</td>
+								<td class="is-right d-num"><strong>{customSizesCount}</strong> kustom</td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/assets/frame-sizes">
+										Buka <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+							<tr>
+								<td>
+									<span class="or-tbl-dim"><Sticker size={15} /><span>Stiker Dekorasi</span></span>
+								</td>
+								<td class="or-tbl-muted">Stiker transparan tambahan di editor strip</td>
+								<td class="is-right d-num"><strong>{customStickersCount}</strong> kustom</td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/assets/stickers">
+										Buka <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+							<tr>
+								<td>
+									<span class="or-tbl-dim"
+										><SlidersHorizontal size={15} /><span>Filter Foto</span></span
+									>
+								</td>
+								<td class="or-tbl-muted">Preset warna CSS kustom dengan pratinjau langsung</td>
+								<td class="is-right d-num"><strong>{customFiltersCount}</strong> kustom</td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/assets/filters">
+										Buka <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+							<tr>
+								<td>
+									<span class="or-tbl-dim"><Sparkles size={15} /><span>Overlay AR</span></span>
+								</td>
+								<td class="or-tbl-muted">Aset overlay transparan siap integrasi kamera</td>
+								<td class="is-right d-num"><strong>{customArCount}</strong> aset</td>
+								<td class="is-right">
+									<a class="or-explore-btn" href="/dashboard/assets/ar">
+										Buka <ChevronRight size={13} />
+									</a>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</article>
+		</section>
+	{/if}
 </div>
 
 <style>
-	.dash-page {
+	.or-page {
 		display: flex;
 		flex-direction: column;
-		gap: 22px;
+		gap: 20px;
 	}
-	.dash-head .eyebrow {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		opacity: 0.6;
-	}
-	.dash-title {
-		margin: 6px 0 0;
-		font-size: 2rem;
-		line-height: 1.1;
-	}
-	.dash-sub {
-		margin: 8px 0 0;
-		max-width: 72ch;
-		font-size: 0.85rem;
-		line-height: 1.55;
-		opacity: 0.75;
-	}
-	.dash-stats {
-		display: grid;
-		gap: 12px;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-	}
-	.stat-label {
-		margin: 0;
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.16em;
-		opacity: 0.6;
-	}
-	.stat-value {
-		margin: 2px 0 0;
-		font-size: 2rem;
-		line-height: 1;
-	}
-	.stat-hint {
-		margin: 4px 0 0;
-		font-size: 0.76rem;
-		line-height: 1.45;
-		opacity: 0.7;
-	}
-	.charts-grid {
-		display: grid;
-		gap: 12px;
-		grid-template-columns: 1fr;
-	}
-	.panel {
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		overflow: hidden;
-	}
-	.panel-head {
-		padding: 14px 16px 0;
-	}
-	.panel-head-tabs {
+
+	/* ── Header Aktivitas ── */
+	.or-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 10px;
+		gap: 14px;
 	}
-	.trend-tabs {
+
+	.or-title {
+		margin: 0;
+		font-size: clamp(1.5rem, 2.3vw, 1.85rem);
+		font-weight: 800;
+		letter-spacing: -0.025em;
+		line-height: 1.15;
+		color: var(--d-ink);
+	}
+
+	.or-sub {
+		margin: 4px 0 0;
+		font-size: 0.84rem;
+		color: var(--d-muted);
+	}
+
+	.or-controls {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 2px;
-		padding: 3px;
-		border-radius: var(--radius-pill, 9999px);
-		background: color-mix(in srgb, var(--color-base-content, #1c1917) 7%, transparent);
+		align-items: center;
+		gap: 8px;
 	}
-	.trend-tab {
-		min-height: 44px;
-		padding: 0 14px;
-		border: 1px solid transparent;
-		border-radius: var(--radius-pill, 9999px);
-		background: transparent;
-		color: inherit;
-		font-family: inherit;
+
+	.or-ctrl-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 34px;
+		padding: 0 11px;
+		border: 1px solid var(--d-border);
+		border-radius: 9px;
+		background: var(--d-surface);
+		color: var(--d-ink);
 		font-size: 0.76rem;
-		font-weight: 600;
-		cursor: pointer;
-		opacity: 0.75;
-	}
-	.trend-tab:hover {
-		opacity: 1;
-	}
-	.trend-tab.active {
-		background: var(--color-base-100, #fafaf9);
-		border-color: var(--color-base-300, #d6d3d1);
-		color: var(--color-base-content, #1c1917);
-		opacity: 1;
-	}
-	.trend-tab:focus-visible {
-		outline: 2px solid var(--color-primary, #d97706);
-		outline-offset: 2px;
-	}
-	.panel-body {
-		padding: 12px 16px 16px;
-	}
-	.section-title {
-		margin: 0;
-		font-size: 0.66rem;
 		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.65;
 	}
-	.panel-sub {
-		margin: 4px 0 0;
-		font-size: 0.76rem;
-		line-height: 1.45;
-		opacity: 0.7;
-	}
-	.panel-note {
-		margin: 0;
-		font-size: 0.82rem;
-		opacity: 0.75;
-	}
-	.alert-panel .panel-note {
-		padding: 14px 16px;
-	}
-	.quick-grid {
+
+	.or-ctrl-icon {
+		width: 34px;
+		height: 34px;
+		border: 1px solid var(--d-border);
+		border-radius: 9px;
+		background: var(--d-surface);
+		color: var(--d-muted);
 		display: grid;
-		gap: 10px;
-		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-		margin-top: 10px;
+		place-items: center;
+		cursor: pointer;
+		transition:
+			color 140ms ease,
+			border-color 140ms ease;
 	}
-	.quick-card {
+
+	.or-ctrl-icon:hover:not(:disabled) {
+		color: var(--d-ink);
+		border-color: var(--d-border-strong);
+	}
+
+	.or-ctrl-icon:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.or-range-wrap {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 34px;
+		padding: 0 10px 0 8px;
+		border: 1px solid var(--d-border);
+		border-radius: 9px;
+		background: var(--d-surface);
+		cursor: pointer;
+	}
+
+	.or-range-tag {
+		padding: 2px 6px;
+		border-radius: 5px;
+		background: var(--d-surface-2);
+		color: var(--d-muted);
+		font-size: 0.68rem;
+		font-weight: 800;
+	}
+
+	.or-range-select {
+		border: none;
+		background: transparent;
+		color: var(--d-ink);
+		font-family: var(--font-body);
+		font-size: 0.78rem;
+		font-weight: 700;
+		outline: none;
+		cursor: pointer;
+	}
+
+	.or-range-select option {
+		background: var(--d-surface);
+		color: var(--d-ink);
+	}
+
+	.or-spin {
+		display: inline-grid;
+	}
+
+	.or-spin.is-spinning {
+		animation: orSpin 900ms linear infinite;
+	}
+
+	@keyframes orSpin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* ── Callout Banner opsional ── */
+	.or-callout {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		padding: 14px 18px;
+		border: 1px solid color-mix(in srgb, var(--d-info) 30%, var(--d-border));
+		border-radius: 14px;
+		background: color-mix(in srgb, var(--d-info) 7%, var(--d-surface));
+	}
+
+	.or-callout-left {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.or-callout-icons {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+	}
+
+	.or-ci {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		border: 1px solid var(--d-border-strong);
+		background: var(--d-surface-2);
+		color: var(--d-ink);
+		display: grid;
+		place-items: center;
+		margin-left: -6px;
+	}
+
+	.or-ci:first-child {
+		margin-left: 0;
+	}
+
+	.or-callout-copy {
+		min-width: 0;
+	}
+
+	.or-callout-title {
+		margin: 0;
+		font-size: 0.84rem;
+		font-weight: 700;
+		color: var(--d-ink);
+	}
+
+	.or-callout-desc {
+		margin: 2px 0 0;
+		font-size: 0.76rem;
+		color: var(--d-muted);
+	}
+
+	.or-callout-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.or-dismiss {
+		width: 30px;
+		height: 30px;
+		border: none;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--d-muted);
+		display: grid;
+		place-items: center;
+		cursor: pointer;
+	}
+
+	.or-dismiss:hover {
+		background: var(--d-surface-2);
+		color: var(--d-ink);
+	}
+
+	/* ── Underline Tabs ── */
+	.or-tabs {
+		display: flex;
+		align-items: center;
+		gap: 24px;
+		border-bottom: 1px solid var(--d-border);
+		overflow-x: auto;
+	}
+
+	.or-tab {
+		position: relative;
+		padding: 10px 2px 12px;
+		border: none;
+		background: transparent;
+		color: var(--d-muted);
+		font-family: var(--font-body);
+		font-size: 0.85rem;
+		font-weight: 700;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: color 140ms ease;
+	}
+
+	.or-tab:hover {
+		color: var(--d-ink);
+	}
+
+	.or-tab.is-active {
+		color: var(--d-accent);
+	}
+
+	.or-tab.is-active::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: -1px;
+		height: 2px;
+		border-radius: 2px 2px 0 0;
+		background: var(--d-accent);
+	}
+
+	/* ── KPI Grid 3×2 dengan Sparkline ── */
+	.or-kpi-grid {
+		display: grid;
+		gap: 14px;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.or-kpi-card {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		padding: 18px 20px;
+		border: 1px solid var(--d-border);
+		border-radius: 14px;
+		background: var(--d-surface);
+		min-width: 0;
+	}
+
+	.or-kpi-left {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 14px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		text-decoration: none;
-		color: inherit;
+		gap: 5px;
+		min-width: 0;
+		flex: 1;
 	}
-	.quick-card:hover {
-		border-color: var(--color-base-content, #1c1917);
+
+	.or-kpi-label {
+		font-size: 0.76rem;
+		font-weight: 600;
+		color: var(--d-muted);
 	}
-	.quick-name {
+
+	.or-kpi-val {
+		font-size: 1.75rem;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		line-height: 1.05;
+		color: var(--d-ink);
+	}
+
+	.or-kpi-val-sm {
+		font-size: 1.05rem;
+		line-height: 1.25;
+		letter-spacing: -0.015em;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.or-kpi-delta {
+		font-size: 0.71rem;
+		font-weight: 600;
+		color: var(--d-muted);
+	}
+
+	.or-kpi-delta.is-up {
+		color: var(--d-ok);
+	}
+
+	.or-kpi-delta.is-down {
+		color: var(--d-err);
+	}
+
+	.or-kpi-spark {
+		width: 96px;
+		flex-shrink: 0;
+	}
+
+	/* ── Grid 2 Kolom (Daftar & Grafik terpisah) ── */
+	.or-two-col {
+		display: grid;
+		gap: 14px;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.or-card-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 15px 18px 12px;
+		border-bottom: 1px solid var(--d-border);
+	}
+
+	.or-card-title {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 0.88rem;
+		font-weight: 700;
+		color: var(--d-ink);
+	}
+
+	.or-explore-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 0;
+		border: none;
+		background: transparent;
+		color: var(--d-muted);
+		font-family: var(--font-body);
+		font-size: 0.76rem;
+		font-weight: 700;
+		text-decoration: none;
+		cursor: pointer;
+		transition: color 140ms ease;
+	}
+
+	.or-explore-btn:hover {
+		color: var(--d-ink);
+	}
+
+	.or-pad {
+		padding: 16px 18px 18px;
+	}
+
+	.or-empty-inline {
+		margin: 0;
+		padding: 26px 18px;
+		text-align: center;
+		font-size: 0.8rem;
+		color: var(--d-muted);
+	}
+
+	/* ── Daftar Peringkat & Riwayat ── */
+	.or-rank-list {
+		margin: 0;
+		padding: 4px 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.or-rank-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 11px 18px;
+		border-bottom: 1px solid var(--d-border);
+		transition: background-color 130ms ease;
+	}
+
+	.or-rank-row:last-child {
+		border-bottom: none;
+	}
+
+	.or-rank-row:hover {
+		background: var(--d-surface-hover);
+	}
+
+	.or-rank-num {
+		width: 20px;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--d-muted);
+		flex-shrink: 0;
+	}
+
+	.or-rank-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.or-row-link {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.or-rank-name {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.84rem;
+		font-weight: 700;
+		color: var(--d-ink);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.or-id-tag {
+		font-size: 0.68rem;
+		font-weight: 700;
+		padding: 1px 6px;
+		border-radius: 5px;
+		background: var(--d-surface-2);
+		color: var(--d-muted);
+	}
+
+	.or-rank-sub {
+		font-size: 0.73rem;
+		color: var(--d-muted);
+	}
+
+	.or-rank-stat {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 1px;
+		flex-shrink: 0;
+	}
+
+	.or-rank-stat strong {
+		font-size: 0.82rem;
+		font-weight: 800;
+		color: var(--d-ink);
+	}
+
+	.or-rank-stat span {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--d-muted);
+	}
+
+	.or-row-end {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.or-ext {
+		width: 26px;
+		height: 26px;
+		border-radius: 7px;
+		border: 1px solid var(--d-border);
+		display: grid;
+		place-items: center;
+		color: var(--d-muted);
+		text-decoration: none;
+	}
+
+	.or-ext:hover {
+		color: var(--d-ink);
+		border-color: var(--d-ink);
+	}
+
+	/* ── Seksi Tab Tren ── */
+	.or-trend-section {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.or-sec-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+	}
+
+	.or-sec-title {
+		margin: 0;
+		font-size: 0.98rem;
+		font-weight: 800;
+		color: var(--d-ink);
+	}
+
+	.or-mini-select {
+		height: 32px;
+		padding: 0 10px;
+		border: 1px solid var(--d-border);
+		border-radius: 8px;
+		background: var(--d-surface);
+		color: var(--d-ink);
+		font-family: var(--font-body);
+		font-size: 0.76rem;
+		font-weight: 700;
+		outline: none;
+		cursor: pointer;
+	}
+
+	.or-movers {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.or-mover-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 11px 18px;
+		border-bottom: 1px solid var(--d-border);
+		font-size: 0.82rem;
+	}
+
+	.or-mover-row:last-child {
+		border-bottom: none;
+	}
+
+	.or-mover-name {
+		flex: 1;
+		font-weight: 700;
+		color: var(--d-ink);
+	}
+
+	.or-mover-nums {
+		font-size: 0.78rem;
+		color: var(--d-muted);
+	}
+
+	.or-mover-nums strong {
+		color: var(--d-ink);
+	}
+
+	.or-mover-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 800;
+		background: var(--d-surface-2);
+		color: var(--d-muted);
+	}
+
+	.or-mover-badge.is-up {
+		background: var(--d-ok-soft);
+		color: var(--d-ok);
+	}
+
+	.or-mover-badge.is-down {
+		background: var(--d-err-soft);
+		color: var(--d-err);
+	}
+
+	/* ── Query Bar Tab Eksplorasi ── */
+	.or-query-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.or-qgroup {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		border: 1px solid var(--d-border);
+		border-radius: 10px;
+		background: var(--d-surface);
+	}
+
+	.or-qsep {
+		font-size: 0.74rem;
+		font-weight: 600;
+		color: var(--d-muted);
+	}
+
+	.or-qselect {
+		height: 28px;
+		padding: 0 4px;
+		border: none;
+		background: transparent;
+		color: var(--d-ink);
+		font-family: var(--font-body);
+		font-size: 0.78rem;
+		font-weight: 700;
+		outline: none;
+		cursor: pointer;
+	}
+
+	.or-qselect option {
+		background: var(--d-surface);
+		color: var(--d-ink);
+	}
+
+	/* ── Tabel Data Rincian ── */
+	.or-table-scroll {
+		width: 100%;
+		overflow-x: auto;
+	}
+
+	.or-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.81rem;
+	}
+
+	.or-table th {
+		padding: 11px 16px;
+		text-align: left;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--d-muted);
+		border-bottom: 1px solid var(--d-border);
+		white-space: nowrap;
+	}
+
+	.or-table td {
+		padding: 12px 16px;
+		color: var(--d-ink);
+		border-bottom: 1px solid var(--d-border);
+		white-space: nowrap;
+	}
+
+	.or-table tbody tr:last-child td {
+		border-bottom: none;
+	}
+
+	.or-table tbody tr:hover {
+		background: var(--d-surface-hover);
+	}
+
+	.or-table .is-right {
+		text-align: right;
+	}
+
+	.or-tbl-dim {
+		display: inline-flex;
+		align-items: center;
+		gap: 9px;
 		font-weight: 700;
 	}
-	.quick-desc {
-		margin: 0;
-		font-size: 0.72rem;
-		line-height: 1.45;
-		opacity: 0.7;
+
+	.or-tbl-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
 	}
-	@media (min-width: 900px) {
-		.charts-grid {
+
+	.or-tbl-muted {
+		color: var(--d-muted);
+		font-size: 0.76rem;
+	}
+
+	.or-table-empty {
+		text-align: center;
+		color: var(--d-muted);
+		padding: 28px 16px !important;
+	}
+
+	.or-table-foot {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 16px;
+		border-top: 1px solid var(--d-border);
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--d-muted);
+	}
+
+	/* ── Skeleton ── */
+	.or-skel {
+		border-radius: 10px;
+		background: linear-gradient(
+			90deg,
+			var(--d-surface-2) 0%,
+			var(--d-surface-hover) 50%,
+			var(--d-surface-2) 100%
+		);
+		background-size: 200% 100%;
+		animation: orShimmer 1.3s ease-in-out infinite;
+	}
+
+	.or-skel-list {
+		height: 180px;
+	}
+
+	@keyframes orShimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -200% 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.or-skel,
+		.or-spin.is-spinning {
+			animation: none;
+		}
+	}
+
+	/* ── Responsif ── */
+	@media (max-width: 1120px) {
+		.or-kpi-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
-		.span-2 {
-			grid-column: span 2;
+	}
+
+	@media (max-width: 960px) {
+		.or-two-col {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 600px) {
+		.or-kpi-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.or-tabs {
+			gap: 16px;
 		}
 	}
 </style>

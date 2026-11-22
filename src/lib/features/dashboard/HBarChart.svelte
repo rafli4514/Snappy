@@ -1,96 +1,97 @@
 <script lang="ts">
-	type Item = { label: string; value: number };
+	export interface HBarItem {
+		label: string;
+		value: number;
+	}
+
 	let {
 		items = [],
 		titleId = 'hbar-title',
-		label = 'Grafik batang horizontal',
-		empty = 'Tidak ada data.'
-	}: { items?: Item[]; titleId?: string; label?: string; empty?: string } = $props();
+		label = 'Distribusi data',
+		empty = 'Belum ada data.'
+	}: {
+		items?: HBarItem[];
+		titleId?: string;
+		label?: string;
+		empty?: string;
+	} = $props();
 
-	const max = $derived(Math.max(1, ...items.map((i) => i.value)));
-	const total = $derived(items.reduce((s, i) => s + i.value, 0));
+	const total = $derived(items.reduce((sum, i) => sum + i.value, 0));
+	const maxVal = $derived(Math.max(1, ...items.map((i) => i.value)));
 </script>
 
-<div class="hbar" role="img" aria-labelledby={titleId}>
-	<span id={titleId} class="sr-only">{label}</span>
-	{#if items.length === 0 || total === 0}
-		<p class="empty">{empty}</p>
-	{:else}
-		<ul class="rows">
-			{#each items as item}
-				{@const pct = (item.value / max) * 100}
-				<li class="row">
-					<span class="name" title={item.label}>{item.label}</span>
-					<div class="track" aria-hidden="true">
-						<div class="fill" style="width:{pct}%"></div>
-					</div>
-					<span class="num font-mono">{item.value}</span>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</div>
+{#if !items.length || total === 0}
+	<p class="hbar-empty">{empty}</p>
+{:else}
+	<div class="hbar-list" role="img" aria-labelledby={titleId}>
+		<span id={titleId} class="sr-only">{label}</span>
+		{#each items as item (item.label)}
+			{@const pct = Math.round((item.value / maxVal) * 100)}
+			{@const share = total > 0 ? Math.round((item.value / total) * 100) : 0}
+			<div class="hbar-row" title="{item.label}: {item.value} ({share}%)">
+				<span class="hbar-label">{item.label}</span>
+				<div class="hbar-track" aria-hidden="true">
+					<span class="hbar-fill" style="width: {item.value > 0 ? Math.max(4, pct) : 0}%;"></span>
+				</div>
+				<span class="hbar-val">{item.value}</span>
+			</div>
+		{/each}
+	</div>
+{/if}
 
 <style>
-	.hbar {
-		width: 100%;
-	}
-	.rows {
-		margin: 0;
-		padding: 0;
-		list-style: none;
+	.hbar-list {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
 	}
-	.row {
+
+	.hbar-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(80px, 1.6fr) auto;
+		grid-template-columns: minmax(0, 110px) minmax(80px, 1fr) auto;
 		align-items: center;
 		gap: 10px;
 	}
-	.name {
+
+	.hbar-label {
 		font-size: 0.78rem;
 		font-weight: 600;
+		color: var(--d-ink, currentColor);
+		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		white-space: nowrap;
-		opacity: 0.9;
 	}
-	.track {
-		height: 10px;
+
+	.hbar-track {
+		height: 8px;
 		border-radius: 999px;
-		background: color-mix(in srgb, var(--color-base-content, #1c1917) 8%, transparent);
+		background: var(--d-surface-2, rgba(148, 163, 184, 0.16));
 		overflow: hidden;
 	}
-	.fill {
+
+	.hbar-fill {
+		display: block;
 		height: 100%;
 		border-radius: 999px;
-		background: #d97706;
-		opacity: 0.85;
-		min-width: 0;
+		background: var(--d-ink, currentColor);
+		opacity: 0.82;
+		transition: width 260ms ease;
 	}
-	.num {
-		font-size: 0.72rem;
-		font-weight: 700;
-		min-width: 2ch;
+
+	.hbar-val {
+		min-width: 28px;
 		text-align: right;
-		opacity: 0.8;
+		font-size: 0.78rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--d-muted, currentColor);
 	}
-	.empty {
+
+	.hbar-empty {
 		margin: 0;
-		font-size: 0.82rem;
-		opacity: 0.7;
-	}
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-		border: 0;
+		padding: 18px 0;
+		text-align: center;
+		font-size: 0.8rem;
+		color: var(--d-muted, #64748b);
 	}
 </style>

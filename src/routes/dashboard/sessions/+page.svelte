@@ -1,53 +1,84 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import type { GallerySession } from '#lib/types';
+	import {
+		RefreshCw,
+		Search,
+		ExternalLink,
+		Camera,
+		Film,
+		Image as ImageIcon
+	} from '@lucide/svelte';
 
 	type SessionSummary = {
 		id: string;
-		createdAt: string;
-		photoCount: number;
-		templateKey: string;
+		createdAt?: string;
+		photoCount?: number;
+		templateKey?: string;
 		formatId?: string;
-		hasGif: boolean;
-		hasVideo: boolean;
+		hasGif?: boolean;
+		hasVideo?: boolean;
 	};
 
-	type GallerySession = {
-		id: string;
-		createdAt: string;
-		photos: string[];
-		stripDataUrl: string;
-		templateKey: string;
-		formatId?: string;
-		gifDataUrl?: string | null;
-		videoDataUrl?: string | null;
-	};
+	type MediaFilter = 'all' | 'video' | 'gif';
 
-	let sessions = $state<SessionSummary[]>([]);
+	let list = $state<SessionSummary[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let query = $state('');
+	let mediaFilter = $state<MediaFilter>('all');
+
 	let selectedId = $state<string | null>(null);
 	let detail = $state<GallerySession | null>(null);
 	let detailLoading = $state(false);
 	let detailError = $state<string | null>(null);
+
+	const filteredList = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		return list.filter((s) => {
+			if (mediaFilter === 'video' && !s.hasVideo) return false;
+			if (mediaFilter === 'gif' && !s.hasGif) return false;
+			if (!q) return true;
+			return (
+				s.id.toLowerCase().includes(q) ||
+				(s.formatId || '').toLowerCase().includes(q) ||
+				(s.templateKey || '').toLowerCase().includes(q)
+			);
+		});
+	});
+
+	function formatDate(iso?: string): string {
+		if (!iso) return '—';
+		const d = new Date(iso);
+		if (!Number.isFinite(d.getTime())) return iso;
+		return d.toLocaleString('id-ID', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
 
 	async function loadList(): Promise<void> {
 		loading = true;
 		error = null;
 		try {
 			const res = await fetch('/api/gallery?list=1&limit=60');
-			if (!res.ok) throw new Error(`Gagal memuat daftar (${res.status})`);
-			const data = (await res.json()) as { ok?: boolean; sessions?: SessionSummary[] };
-			sessions = Array.isArray(data.sessions) ? data.sessions : [];
+			if (!res.ok) throw new Error('Daftar sesi tidak tersedia');
+			const data = (await res.json()) as { sessions?: SessionSummary[] };
+			list = Array.isArray(data.sessions) ? data.sessions : [];
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat riwayat sesi.';
-			sessions = [];
+			list = [];
+			error = e instanceof Error ? e.message : 'Gagal memuat daftar sesi.';
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function openDetail(id: string): Promise<void> {
-		if (selectedId === id && detail) {
+	async function openDetail(id: string, toggleOff = true): Promise<void> {
+		if (toggleOff && selectedId === id && detail) {
 			selectedId = null;
 			detail = null;
 			detailError = null;
@@ -59,10 +90,8 @@
 		detailLoading = true;
 		try {
 			const res = await fetch(`/api/gallery/${encodeURIComponent(id)}`);
-			if (!res.ok) throw new Error(`Sesi tidak ditemukan (${res.status})`);
-			const data = (await res.json()) as GallerySession | { error?: string };
-			if ('error' in data && data.error) throw new Error(data.error);
-			detail = data as GallerySession;
+			if (!res.ok) throw new Error('Detail sesi tidak ditemukan');
+			detail = (await res.json()) as GallerySession;
 		} catch (e) {
 			detailError = e instanceof Error ? e.message : 'Gagal memuat detail sesi.';
 		} finally {
@@ -70,364 +99,419 @@
 		}
 	}
 
-	function fmtDate(iso: string): string {
-		try {
-			return new Date(iso).toLocaleString('id-ID', {
-				dateStyle: 'medium',
-				timeStyle: 'short'
-			});
-		} catch {
-			return iso;
+	onMount(async () => {
+		await loadList();
+		const targetId = page.url.searchParams.get('id');
+		if (targetId) {
+			void openDetail(targetId, false);
+		} else if (list.length > 0) {
+			void openDetail(list[0].id, false);
 		}
-	}
-
-	onMount(() => {
-		void loadList();
 	});
 </script>
 
-<div class="dash-page">
-	<header class="dash-head">
-		<div class="head-row">
-			<div>
-				<p class="eyebrow font-mono">ADMIN · SESSION</p>
-				<h1 class="dash-title font-display">Session / Riwayat</h1>
-				<p class="dash-sub">
-					Riwayat sesi dari galeri server. Pilih sesi untuk melihat output foto (strip dan foto
-					individu).
-				</p>
-			</div>
-			<button type="button" class="btn btn-outline btn-sm" onclick={loadList} disabled={loading}>
-				{loading ? 'Memuat…' : 'Muat ulang'}
+<div class="d-page">
+	<header class="d-head">
+		<div>
+			<p class="d-eyebrow">RIWAYAT PEMOTRETAN</p>
+			<h1 class="d-title">Sesi</h1>
+			<p class="d-sub">
+				Periksa hasil strip cetak, foto individu, GIF, dan video MP4 dari setiap sesi tamu.
+			</p>
+		</div>
+		<div class="d-actions">
+			<button type="button" class="d-btn" onclick={loadList} disabled={loading}>
+				<RefreshCw size={14} />
+				{loading ? 'Memuat…' : 'Muat Ulang'}
 			</button>
 		</div>
 	</header>
 
-	{#if error}
-		<div class="alert alert-warning" role="status">
-			<span
-				>{error} Riwayat server butuh runtime Node dengan akses disk ke
-				<code>.gallery_cache</code>.</span
-			>
+	<!-- Bar pencarian & filter -->
+	<div class="filter-bar">
+		<div class="d-search-wrap">
+			<Search size={15} />
+			<input
+				type="search"
+				class="d-input"
+				placeholder="Cari ID sesi atau format…"
+				bind:value={query}
+				aria-label="Cari sesi"
+			/>
 		</div>
+
+		<div class="d-tabs" role="tablist" aria-label="Filter media sesi">
+			<button
+				type="button"
+				role="tab"
+				class="d-tab"
+				class:is-active={mediaFilter === 'all'}
+				aria-selected={mediaFilter === 'all'}
+				onclick={() => (mediaFilter = 'all')}
+			>
+				Semua ({list.length})
+			</button>
+			<button
+				type="button"
+				role="tab"
+				class="d-tab"
+				class:is-active={mediaFilter === 'video'}
+				aria-selected={mediaFilter === 'video'}
+				onclick={() => (mediaFilter = 'video')}
+			>
+				Ada Video
+			</button>
+			<button
+				type="button"
+				role="tab"
+				class="d-tab"
+				class:is-active={mediaFilter === 'gif'}
+				aria-selected={mediaFilter === 'gif'}
+				onclick={() => (mediaFilter = 'gif')}
+			>
+				Ada GIF
+			</button>
+		</div>
+	</div>
+
+	{#if error}
+		<div class="d-banner d-banner-err" role="alert">{error}</div>
 	{/if}
 
-	<div class="layout">
-		<section class="panel list-panel" aria-label="Daftar sesi">
-			<div class="panel-head">
-				<h2 class="section-title font-mono">DAFTAR SESI</h2>
-				<span class="count font-mono">{sessions.length}</span>
+	<div class="sessions-split">
+		<!-- Kolom Kiri: Daftar Sesi -->
+		<section class="d-card list-panel" aria-label="Daftar sesi">
+			<div class="d-card-head">
+				<div>
+					<h2 class="d-card-title">Daftar Sesi</h2>
+					<p class="d-card-sub d-num">{filteredList.length} sesi ditampilkan</p>
+				</div>
 			</div>
-			<div class="panel-body">
-				{#if loading}
-					<p class="panel-note">Memuat riwayat…</p>
-				{:else if sessions.length === 0}
-					<p class="panel-note">Belum ada sesi tersimpan di galeri server.</p>
-				{:else}
-					<ul class="session-list">
-						{#each sessions as s (s.id)}
-							<li>
-								<button
-									type="button"
-									class="session-row"
-									class:active={selectedId === s.id}
-									onclick={() => openDetail(s.id)}
-									aria-expanded={selectedId === s.id}
-								>
-									<span class="row-main">
-										<span class="row-id font-mono">{s.id}</span>
-										<span class="row-meta">{fmtDate(s.createdAt)} · {s.photoCount} foto</span>
-									</span>
-									<span class="row-badges">
-										{#if s.formatId}<span class="mini-badge font-mono">{s.formatId}</span>{/if}
-										{#if s.hasGif}<span class="mini-badge">GIF</span>{/if}
-										{#if s.hasVideo}<span class="mini-badge">MP4</span>{/if}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
+
+			{#if loading}
+				<div class="d-empty">Memuat sesi…</div>
+			{:else if filteredList.length === 0}
+				<div class="d-empty">
+					<Camera size={24} />
+					<p class="d-empty-title">Tidak ada sesi ditemukan</p>
+					<span>Ubah kata kunci pencarian atau selesaikan sesi baru.</span>
+				</div>
+			{:else}
+				<div class="session-scroll">
+					{#each filteredList as s (s.id)}
+						<button
+							type="button"
+							class="session-item"
+							class:is-active={selectedId === s.id}
+							onclick={() => openDetail(s.id)}
+						>
+							<div class="session-item-top">
+								<span class="session-id d-num">#{s.id}</span>
+								<span class="session-date">{formatDate(s.createdAt)}</span>
+							</div>
+							<div class="session-item-meta">
+								<span class="d-pill d-num">{s.photoCount ?? 0} foto</span>
+								{#if s.formatId || s.templateKey}
+									<span class="d-pill">{s.formatId || s.templateKey}</span>
+								{/if}
+								{#if s.hasVideo}
+									<span class="d-pill d-pill-info">MP4</span>
+								{/if}
+								{#if s.hasGif}
+									<span class="d-pill d-pill-warn">GIF</span>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</section>
 
-		<section class="panel detail-panel" aria-label="Output foto sesi">
-			<div class="panel-head">
-				<h2 class="section-title font-mono">OUTPUT FOTO</h2>
-				{#if detail}
-					<a
-						class="btn btn-ghost btn-xs"
-						href={`/gallery/${detail.id}`}
-						target="_blank"
-						rel="noopener noreferrer">Buka galeri</a
-					>
-				{/if}
-			</div>
-			<div class="panel-body">
-				{#if !selectedId}
-					<p class="panel-note">Pilih sesi dari daftar untuk melihat output foto.</p>
-				{:else if detailLoading}
-					<p class="panel-note">Memuat output foto…</p>
-				{:else if detailError}
-					<div class="alert alert-warning" role="status"><span>{detailError}</span></div>
-				{:else if detail}
-					<div class="detail-meta font-mono">
-						<span>ID: {detail.id}</span>
-						<span>{fmtDate(detail.createdAt)}</span>
-						<span>{detail.photos?.length ?? 0} foto</span>
-						{#if detail.formatId}<span>Format: {detail.formatId}</span>{/if}
+		<!-- Kolom Kanan: Detail Sesi -->
+		<section class="d-card detail-panel" aria-label="Detail output sesi">
+			{#if !selectedId}
+				<div class="d-empty detail-empty">
+					<ImageIcon size={28} />
+					<p class="d-empty-title">Pilih sesi di sebelah kiri</p>
+					<span>Pratinjau strip final, foto satuan, dan timelapse akan tampil di sini.</span>
+				</div>
+			{:else if detailLoading}
+				<div class="d-empty detail-empty">Memuat output sesi #{selectedId}…</div>
+			{:else if detailError}
+				<div class="d-card-body">
+					<div class="d-banner d-banner-err" role="alert">{detailError}</div>
+				</div>
+			{:else if detail}
+				<div class="d-card-head">
+					<div>
+						<h2 class="d-card-title d-num">Sesi #{detail.id}</h2>
+						<p class="d-card-sub">
+							{formatDate(detail.createdAt)} · {detail.photos?.length ?? 0} foto · {detail.templateKey ||
+								'standar'}
+						</p>
 					</div>
+					<a
+						class="d-btn d-btn-sm d-btn-primary"
+						href={`/gallery/${encodeURIComponent(detail.id)}`}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						Buka Galeri
+						<ExternalLink size={13} />
+					</a>
+				</div>
 
+				<div class="d-card-body detail-stack">
 					{#if detail.stripDataUrl}
 						<div class="output-block">
-							<p class="block-label font-mono">STRIP</p>
-							<img
-								class="strip-img"
-								src={detail.stripDataUrl}
-								alt="Output strip sesi {detail.id}"
-							/>
+							<p class="d-eyebrow">HASIL STRIP FINAL</p>
+							<div class="strip-stage">
+								<img
+									src={detail.stripDataUrl}
+									alt="Hasil strip sesi {detail.id}"
+									class="strip-preview"
+								/>
+							</div>
 						</div>
 					{/if}
 
 					{#if detail.photos?.length}
 						<div class="output-block">
-							<p class="block-label font-mono">FOTO</p>
-							<div class="photo-grid">
-								{#each detail.photos as src, i (i)}
-									{#if src}
-										<img
-											class="photo-img"
-											{src}
-											alt="Foto {i + 1} sesi {detail.id}"
-											loading="lazy"
-										/>
-									{/if}
+							<p class="d-eyebrow">FOTO INDIVIDU ({detail.photos.length})</p>
+							<div class="photos-grid">
+								{#each detail.photos as p, i (i)}
+									<div class="photo-thumb">
+										<img src={p} alt="Foto {i + 1} sesi {detail.id}" loading="lazy" />
+										<span class="photo-idx">{i + 1}</span>
+									</div>
 								{/each}
 							</div>
 						</div>
 					{/if}
 
-					{#if detail.gifDataUrl}
+					{#if detail.videoDataUrl || detail.gifDataUrl}
 						<div class="output-block">
-							<p class="block-label font-mono">TIMELAPSE (GIF)</p>
-							<img
-								class="gif-img"
-								src={detail.gifDataUrl}
-								alt="Timelapse GIF sesi {detail.id}"
-								loading="lazy"
-							/>
+							<p class="d-eyebrow">TIMELAPSE</p>
+							<div class="tl-grid">
+								{#if detail.videoDataUrl}
+									<div class="tl-card">
+										<span class="tl-label"><Film size={13} /> Video MP4</span>
+										<!-- svelte-ignore a11y_media_has_caption -->
+										<video
+											src={detail.videoDataUrl}
+											controls
+											loop
+											muted
+											playsinline
+											class="tl-media"
+										></video>
+									</div>
+								{/if}
+								{#if detail.gifDataUrl}
+									<div class="tl-card">
+										<span class="tl-label"><ImageIcon size={13} /> Animasi GIF</span>
+										<img
+											src={detail.gifDataUrl}
+											alt="GIF timelapse sesi {detail.id}"
+											class="tl-media"
+										/>
+									</div>
+								{/if}
+							</div>
 						</div>
 					{/if}
-
-					{#if detail.videoDataUrl}
-						<div class="output-block">
-							<p class="block-label font-mono">TIMELAPSE (MP4)</p>
-							<video class="video-el" src={detail.videoDataUrl} controls loop muted playsinline
-							></video>
-						</div>
-					{/if}
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</section>
 	</div>
 </div>
 
 <style>
-	.dash-page {
+	.filter-bar {
 		display: flex;
-		flex-direction: column;
-		gap: 18px;
-	}
-	.head-row {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
 		flex-wrap: wrap;
-	}
-	.dash-head .eyebrow {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		opacity: 0.6;
-	}
-	.dash-title {
-		margin: 6px 0 0;
-		font-size: 2rem;
-		line-height: 1.1;
-	}
-	.dash-sub {
-		margin: 8px 0 0;
-		max-width: 62ch;
-		font-size: 0.85rem;
-		line-height: 1.55;
-		opacity: 0.7;
-	}
-	.layout {
-		display: grid;
-		gap: 12px;
-		grid-template-columns: minmax(0, 1fr);
-	}
-	@media (min-width: 980px) {
-		.layout {
-			grid-template-columns: 360px minmax(0, 1fr);
-			align-items: start;
-		}
-	}
-	.panel {
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		overflow: hidden;
-	}
-	.panel-head {
-		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		padding: 12px 14px;
-		border-bottom: 1px solid var(--color-base-300, #d6d3d1);
 	}
-	.panel-body {
-		padding: 14px;
+
+	.sessions-split {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: 1fr;
+		align-items: start;
 	}
-	.section-title {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.6;
+
+	.session-scroll {
+		max-height: 68dvh;
+		overflow-y: auto;
 	}
-	.count {
-		font-size: 0.72rem;
-		opacity: 0.7;
-	}
-	.panel-note {
-		margin: 0;
-		font-size: 0.85rem;
-		opacity: 0.75;
-	}
-	.session-list {
-		margin: 0;
-		padding: 0;
-		list-style: none;
+
+	.session-item {
+		width: 100%;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		max-height: 65vh;
-		overflow: auto;
-	}
-	.session-row {
-		width: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 12px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: 10px;
-		background: var(--color-base-100, #fff);
+		padding: 13px 16px;
+		border: none;
+		border-bottom: 1px solid var(--d-border);
+		border-left: 3px solid transparent;
+		background: transparent;
+		color: var(--d-ink);
 		text-align: left;
 		cursor: pointer;
-		color: inherit;
+		transition:
+			background-color 140ms ease,
+			border-color 140ms ease;
 	}
-	.session-row:hover {
-		border-color: color-mix(in srgb, var(--color-base-content, #1c1917) 35%, transparent);
+
+	.session-item:last-child {
+		border-bottom: none;
 	}
-	.session-row.active {
-		border-color: var(--color-base-content, #1c1917);
+
+	.session-item:hover {
+		background: var(--d-surface-hover);
 	}
-	.row-main {
+
+	.session-item.is-active {
+		background: var(--d-surface-2);
+		border-left-color: var(--d-ink);
+	}
+
+	.session-item-top {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.row-id {
-		font-size: 0.78rem;
-		font-weight: 700;
-	}
-	.row-meta {
-		font-size: 0.72rem;
-		opacity: 0.7;
-	}
-	.row-badges {
-		display: flex;
-		gap: 4px;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-	.mini-badge {
-		font-size: 0.58rem;
-		font-weight: 700;
-		padding: 2px 6px;
-		border-radius: 999px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		opacity: 0.8;
-	}
-	.detail-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px 14px;
-		font-size: 0.68rem;
-		opacity: 0.75;
-		margin-bottom: 12px;
-	}
-	.output-block {
-		margin-top: 14px;
-	}
-	.block-label {
-		margin: 0 0 8px;
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.18em;
-		opacity: 0.6;
-	}
-	.strip-img {
-		display: block;
-		max-width: 100%;
-		max-height: 520px;
-		width: auto;
-		height: auto;
-		border-radius: 8px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		background: #fff;
-	}
-	.photo-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		align-items: center;
+		justify-content: space-between;
 		gap: 8px;
 	}
-	.photo-img {
-		display: block;
-		width: 100%;
-		aspect-ratio: 1 / 1;
-		object-fit: cover;
-		border-radius: 8px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		background: #fff;
+
+	.session-id {
+		font-size: 0.84rem;
+		font-weight: 800;
 	}
-	.gif-img,
-	.video-el {
-		display: block;
+
+	.session-date {
+		font-size: 0.72rem;
+		color: var(--d-muted);
+	}
+
+	.session-item-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+	}
+
+	.detail-empty {
+		min-height: 360px;
+		justify-content: center;
+	}
+
+	.detail-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+
+	.output-block {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.strip-stage {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 18px;
+		border: 1px solid var(--d-border);
+		border-radius: 14px;
+		background: var(--d-bg);
+	}
+
+	.strip-preview {
 		max-width: 100%;
-		max-height: 360px;
-		border-radius: 8px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		background: #000;
+		max-height: 440px;
+		width: auto;
+		height: auto;
+		border-radius: 6px;
+		box-shadow: var(--d-shadow);
 	}
-	.alert {
-		padding: 10px 12px;
+
+	.photos-grid {
+		display: grid;
+		gap: 10px;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	}
+
+	.photo-thumb {
+		position: relative;
+		aspect-ratio: 4 / 3;
+		border: 1px solid var(--d-border);
+		border-radius: 12px;
+		overflow: hidden;
+		background: var(--d-surface-2);
+	}
+
+	.photo-thumb img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.photo-idx {
+		position: absolute;
+		top: 7px;
+		left: 7px;
+		min-width: 22px;
+		height: 22px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.72);
+		color: #ffffff;
+		font-size: 0.68rem;
+		font-weight: 700;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.tl-grid {
+		display: grid;
+		gap: 12px;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	}
+
+	.tl-card {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px;
+		border: 1px solid var(--d-border);
+		border-radius: 14px;
+		background: var(--d-bg);
+	}
+
+	.tl-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--d-muted);
+	}
+
+	.tl-media {
+		width: 100%;
+		max-height: 260px;
 		border-radius: 10px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		font-size: 0.82rem;
+		object-fit: contain;
+		background: #000000;
 	}
-	.alert-warning {
-		background: color-mix(in srgb, #f59e0b 12%, transparent);
-	}
-	.alert code {
-		font-size: 0.78em;
+
+	@media (min-width: 980px) {
+		.sessions-split {
+			grid-template-columns: 340px minmax(0, 1fr);
+		}
 	}
 </style>

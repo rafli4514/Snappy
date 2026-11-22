@@ -39,6 +39,7 @@ interface SaveGallerySessionInput {
 	photos: string[];
 	stripDataUrl: string;
 	templateKey: string;
+	formatId?: string;
 	gifDataUrl?: string | null;
 	videoDataUrl?: string | null;
 }
@@ -51,6 +52,7 @@ export async function saveGallerySession({
 	photos,
 	stripDataUrl,
 	templateKey,
+	formatId,
 	gifDataUrl = null,
 	videoDataUrl = null
 }: SaveGallerySessionInput): Promise<string> {
@@ -66,6 +68,7 @@ export async function saveGallerySession({
 		photos: (photos || []).filter(Boolean),
 		stripDataUrl: stripDataUrl || '',
 		templateKey: typeof templateKey === 'string' ? templateKey : 'custom',
+		...(formatId ? { formatId } : {}),
 		gifDataUrl: gifDataUrl || null,
 		videoDataUrl: safeVideo
 	};

@@ -14,6 +14,8 @@
 
 	let loading = $state(true);
 	let saving = $state(false);
+	let deletingKey = $state<string | null>(null);
+	let confirmDeleteKey = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
 	let editingKey = $state<string | null>(null);
@@ -35,10 +37,16 @@
 	async function refresh(): Promise<void> {
 		loading = true;
 		error = null;
-		await loadCustomAssets(true);
-		loading = false;
+		try {
+			await loadCustomAssets(true);
+		} finally {
+			loading = false;
+		}
 	}
-	onMount(() => void refresh());
+
+	onMount(() => {
+		void refresh();
+	});
 
 	function resetForm(): void {
 		editingKey = null;
@@ -46,6 +54,7 @@
 	}
 
 	function edit(f: PhotoFilter & { enabled?: boolean }): void {
+		confirmDeleteKey = null;
 		editingKey = f.key;
 		form = {
 			name: f.name,
@@ -56,10 +65,11 @@
 		};
 	}
 
-	async function save(): Promise<void> {
+	async function save(e: SubmitEvent): Promise<void> {
+		e.preventDefault();
 		const name = form.name.trim();
 		if (!name) {
-			error = 'Nama filter diperlukan.';
+			error = 'Nama filter wajib diisi.';
 			return;
 		}
 		saving = true;
@@ -70,9 +80,9 @@
 			const key =
 				editingKey ||
 				name
-					.trim()
 					.toLowerCase()
-					.replace(/[^a-z0-9_-]+/g, '-');
+					.replace(/[^a-z0-9_-]+/g, '-')
+					.replace(/^-+|-+$/g, '');
 			const res = await fetch('/api/assets/filters', {
 				method,
 				headers: { 'content-type': 'application/json' },
@@ -81,17 +91,17 @@
 			const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
 			if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal menyimpan filter.');
 			await loadCustomAssets(true);
-			notice = editingKey ? 'Filter custom diperbarui.' : 'Filter custom ditambahkan.';
+			notice = editingKey ? 'Filter kustom diperbarui.' : 'Filter kustom ditambahkan.';
 			resetForm();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal menyimpan filter.';
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Gagal menyimpan filter.';
 		} finally {
 			saving = false;
 		}
 	}
 
 	async function remove(key: string, label: string): Promise<void> {
-		if (!confirm(`Hapus filter "${label}"?`)) return;
+		deletingKey = key;
 		error = null;
 		notice = null;
 		try {
@@ -102,157 +112,243 @@
 			});
 			const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
 			if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal menghapus filter.');
+			confirmDeleteKey = null;
 			if (editingKey === key) resetForm();
 			await loadCustomAssets(true);
-			notice = 'Filter custom dihapus.';
+			notice = `Filter "${label}" berhasil dihapus.`;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Gagal menghapus filter.';
+		} finally {
+			deletingKey = null;
 		}
 	}
 </script>
 
-<div class="dash-page">
-	<header class="dash-head">
-		<div class="head-row">
-			<div>
-				<p class="eyebrow font-mono">ADMIN · ASSET · FILTER</p>
-				<h1 class="dash-title font-display">Filter</h1>
-				<p class="dash-sub">
-					Filter bawaan <strong>terkunci</strong>. Filter custom (preset <code>cssFilter</code>)
-					dapat ditambah, diedit, dan dihapus. Filter custom aktif muncul di picker editor/dekorasi.
-					<em>Catatan:</em>
-					pratinjau memakai <code>cssFilter</code>; nilai ffmpeg disimpan sebagai metadata (render
-					akhir bergantung pipeline).
-				</p>
-			</div>
-			<button type="button" class="btn btn-outline btn-sm" onclick={refresh} disabled={loading}
-				>Muat ulang</button
-			>
+<div class="d-page">
+	<header class="d-head">
+		<div>
+			<p class="d-eyebrow">Aset · Filter Foto</p>
+			<h1 class="d-title">Filter Foto</h1>
+			<p class="d-sub">
+				Filter bawaan terkunci. Tambahkan preset kustom berbasis ekspresi CSS filter untuk pratinjau
+				langsung pada layar editor dan dekorasi strip. Nilai ffmpeg disimpan sebagai metadata
+				opsional.
+			</p>
+		</div>
+		<div class="d-actions">
+			<a class="d-btn" href="/dashboard/assets">Kembali</a>
+			<button type="button" class="d-btn" onclick={refresh} disabled={loading}>
+				{loading ? 'Memuat…' : 'Muat Ulang'}
+			</button>
 		</div>
 	</header>
 
-	{#if error}<div class="alert alert-warning" role="status"><span>{error}</span></div>{/if}
-	{#if notice}<div class="alert alert-success" role="status"><span>{notice}</span></div>{/if}
+	{#if error}
+		<div class="d-banner d-banner-warn" role="status"><span>{error}</span></div>
+	{/if}
+	{#if notice}
+		<div class="d-banner d-banner-ok" role="status"><span>{notice}</span></div>
+	{/if}
 
-	<section class="panel" aria-label="Form filter custom">
-		<div class="panel-head">
-			<h2 class="section-title font-mono">
-				{editingKey ? 'EDIT FILTER CUSTOM' : 'TAMBAH FILTER CUSTOM'}
-			</h2>
-		</div>
-		<div class="panel-body form-grid">
-			<label class="field">
-				<span class="label font-mono">NAMA</span>
-				<input
-					class="input-bordered input input-sm"
-					bind:value={form.name}
-					placeholder="Contoh: Film Hangat"
-					maxlength="80"
-				/>
-			</label>
-			<label class="field">
-				<span class="label font-mono">KATEGORI</span>
-				<select class="select-bordered select select-sm" bind:value={form.category}>
-					{#each CATEGORIES as c}<option value={c}>{c}</option>{/each}
-				</select>
-			</label>
-			<label class="field wide">
-				<span class="label font-mono">CSS FILTER (PRATINJAU)</span>
-				<input
-					class="input-bordered input input-sm"
-					bind:value={form.cssFilter}
-					placeholder="sepia(0.4) contrast(1.1) saturate(1.2)"
-				/>
-			</label>
-			<label class="field wide">
-				<span class="label font-mono">FFMPEG (OPSIONAL, METADATA)</span>
-				<input
-					class="input-bordered input input-sm"
-					bind:value={form.ffmpeg}
-					placeholder="opsional"
-				/>
-			</label>
-			<label class="toggle-label font-mono"
-				><input type="checkbox" bind:checked={form.enabled} /> AKTIF</label
-			>
-			<div class="row-actions">
-				<button type="button" class="btn btn-primary btn-sm" onclick={save} disabled={saving}
-					>{saving ? 'Menyimpan…' : 'Simpan'}</button
-				>
-				{#if editingKey}<button type="button" class="btn btn-ghost btn-sm" onclick={resetForm}
-						>Batal</button
-					>{/if}
+	<section class="d-card" aria-label="Formulir filter kustom">
+		<div class="d-card-head">
+			<div>
+				<h2 class="d-card-title">
+					{editingKey ? 'Edit Filter Kustom' : 'Tambah Filter Kustom'}
+				</h2>
+				<p class="d-card-sub">
+					Ketik aturan CSS filter lalu lihat efek warnanya secara langsung di kotak pratinjau.
+				</p>
 			</div>
-		</div>
-	</section>
-
-	<section class="panel" aria-label="Filter custom">
-		<div class="panel-head">
-			<h2 class="section-title font-mono">CUSTOM (DAPAT DIEDIT)</h2>
-			<span class="count font-mono">{loading ? '…' : custom.length}</span>
-		</div>
-		<div class="panel-body">
-			{#if loading}
-				<p class="panel-note">Memuat filter custom…</p>
-			{:else if custom.length === 0}
-				<p class="panel-note">Belum ada filter custom.</p>
-			{:else}
-				<ul class="asset-list">
-					{#each custom as f (f.key)}
-						<li class="asset-row">
-							<div class="swatch" style="filter: {f.cssFilter || 'none'}" aria-hidden="true"></div>
-							<div class="asset-main">
-								<p class="asset-name">{f.name} <span class="edit-tag">CUSTOM</span></p>
-								<p class="asset-meta font-mono">
-									{f.category} · {f.key} · {f.cssFilter || '(tanpa css)'} · {f.enabled === false
-										? 'NONAKTIF'
-										: 'AKTIF'}
-								</p>
-							</div>
-							<div class="row-actions">
-								<button type="button" class="btn btn-ghost btn-xs" onclick={() => edit(f)}
-									>Edit</button
-								>
-								<button
-									type="button"
-									class="btn btn-ghost text-error btn-xs"
-									onclick={() => remove(f.key, f.name)}>Hapus</button
-								>
-							</div>
-						</li>
-					{/each}
-				</ul>
+			{#if editingKey}
+				<span class="d-pill d-pill-info">Mengedit: {editingKey}</span>
 			{/if}
 		</div>
+		<div class="d-card-body">
+			<form class="filter-form" onsubmit={save}>
+				<div class="preview-strip">
+					<div class="preview-pair">
+						<div class="swatch-box">
+							<div class="swatch-lg" aria-hidden="true"></div>
+							<span class="swatch-cap">Asli</span>
+						</div>
+						<div class="swatch-box">
+							<div
+								class="swatch-lg"
+								style="filter: {form.cssFilter || 'none'}"
+								aria-hidden="true"
+							></div>
+							<span class="swatch-cap">Hasil Filter</span>
+						</div>
+					</div>
+					<div class="preview-inputs">
+						<div class="d-form-grid">
+							<div class="d-field">
+								<label class="d-field-label" for="fl-name">Nama Filter</label>
+								<input
+									id="fl-name"
+									class="d-input"
+									type="text"
+									bind:value={form.name}
+									placeholder="Contoh: Film Hangat"
+									maxlength="80"
+									required
+								/>
+							</div>
+							<div class="d-field">
+								<label class="d-field-label" for="fl-cat">Kategori</label>
+								<select id="fl-cat" class="d-select" bind:value={form.category}>
+									{#each CATEGORIES as c (c)}
+										<option value={c}>{c}</option>
+									{/each}
+								</select>
+							</div>
+						</div>
+
+						<div class="d-form-grid">
+							<div class="d-field">
+								<label class="d-field-label" for="fl-css">CSS Filter (Pratinjau)</label>
+								<input
+									id="fl-css"
+									class="d-input"
+									type="text"
+									bind:value={form.cssFilter}
+									placeholder="sepia(0.35) contrast(1.1) saturate(1.2)"
+								/>
+							</div>
+							<div class="d-field">
+								<label class="d-field-label" for="fl-ff">FFmpeg (Opsional, Metadata)</label>
+								<input
+									id="fl-ff"
+									class="d-input"
+									type="text"
+									bind:value={form.ffmpeg}
+									placeholder="Opsional"
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="form-footer">
+					<label class="toggle-inline">
+						<input type="checkbox" class="toggle toggle-sm" bind:checked={form.enabled} />
+						<span>Aktifkan di picker editor</span>
+					</label>
+					<div class="d-actions">
+						{#if editingKey}
+							<button type="button" class="d-btn d-btn-ghost" onclick={resetForm} disabled={saving}>
+								Batal
+							</button>
+						{/if}
+						<button type="submit" class="d-btn d-btn-primary" disabled={saving}>
+							{saving ? 'Menyimpan…' : editingKey ? 'Perbarui Filter' : 'Simpan Filter'}
+						</button>
+					</div>
+				</div>
+			</form>
+		</div>
 	</section>
 
-	<section class="panel" aria-label="Filter bawaan">
-		<div class="panel-head">
-			<h2 class="section-title font-mono">BAWAAN (TERKUNCI)</h2>
-			<span class="count font-mono">{PHOTO_FILTERS.length}</span>
+	<section class="d-card" aria-label="Daftar filter kustom">
+		<div class="d-card-head">
+			<div>
+				<h2 class="d-card-title">Filter Kustom</h2>
+				<p class="d-card-sub">Dapat diedit, dinonaktifkan, atau dihapus.</p>
+			</div>
+			<span class="d-pill d-pill-ok d-num">{loading ? '…' : custom.length} filter</span>
 		</div>
-		<div class="panel-body">
-			<details class="builtin-details">
-				<summary class="font-mono">Lihat filter bawaan</summary>
+
+		{#if loading}
+			<div class="d-empty"><p>Memuat daftar filter kustom…</p></div>
+		{:else if custom.length === 0}
+			<div class="d-empty">
+				<p class="d-empty-title">Belum ada filter kustom</p>
+				<p>Buat preset warna kustom pertama melalui formulir di atas.</p>
+			</div>
+		{:else}
+			<div class="d-list">
+				{#each custom as f (f.key)}
+					<div class="d-row">
+						<div class="swatch" style="filter: {f.cssFilter || 'none'}" aria-hidden="true"></div>
+						<div class="row-info">
+							<div class="row-top">
+								<p class="row-name">{f.name}</p>
+								<span class="d-pill d-pill-info">{f.category}</span>
+								<span class="d-pill" class:d-pill-ok={f.enabled !== false}>
+									{f.enabled === false ? 'Nonaktif' : 'Aktif'}
+								</span>
+							</div>
+							<p class="row-meta">
+								Kunci: {f.key} · {f.cssFilter || 'Tanpa CSS filter'}
+							</p>
+						</div>
+						<div class="d-actions">
+							{#if confirmDeleteKey === f.key}
+								<span class="confirm-note">Hapus "{f.name}"?</span>
+								<button
+									type="button"
+									class="d-btn d-btn-danger d-btn-sm"
+									disabled={deletingKey === f.key}
+									onclick={() => remove(f.key, f.name)}
+								>
+									{deletingKey === f.key ? 'Menghapus…' : 'Ya, Hapus'}
+								</button>
+								<button
+									type="button"
+									class="d-btn d-btn-sm"
+									disabled={deletingKey === f.key}
+									onclick={() => (confirmDeleteKey = null)}
+								>
+									Batal
+								</button>
+							{:else}
+								<button type="button" class="d-btn d-btn-sm" onclick={() => edit(f)}>Edit</button>
+								<button
+									type="button"
+									class="d-btn d-btn-danger d-btn-sm"
+									onclick={() => (confirmDeleteKey = f.key)}
+								>
+									Hapus
+								</button>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</section>
+
+	<section class="d-card" aria-label="Filter bawaan terkunci">
+		<div class="d-card-head">
+			<div>
+				<h2 class="d-card-title">Filter Bawaan</h2>
+				<p class="d-card-sub">Preset warna standar studio (terkunci).</p>
+			</div>
+			<span class="d-pill d-num">{PHOTO_FILTERS.length} filter</span>
+		</div>
+		<div class="d-card-body">
+			<details class="builtin-fold">
+				<summary>Tampilkan seluruh filter bawaan ({PHOTO_FILTERS.length})</summary>
 				<div class="groups">
-					{#each Object.entries(builtinGroups) as [cat, filters]}
+					{#each Object.entries(builtinGroups) as [cat, filters] (cat)}
 						<div class="group">
-							<p class="group-name font-mono">{cat}</p>
-							<ul class="asset-list compact">
+							<p class="group-title">{cat}</p>
+							<div class="builtin-grid">
 								{#each filters as f (f.key)}
-									<li class="asset-row">
+									<div class="builtin-tile">
 										<div
 											class="swatch"
 											style="filter: {f.cssFilter || 'none'}"
 											aria-hidden="true"
 										></div>
-										<div class="asset-main">
-											<p class="asset-name">{f.name} <span class="lock-tag">TERKUNCI</span></p>
-											<p class="asset-meta font-mono">{f.key}</p>
+										<div class="tile-info">
+											<p class="tile-name">{f.name}</p>
+											<p class="tile-meta">{f.key}</p>
 										</div>
-									</li>
+									</div>
 								{/each}
-							</ul>
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -262,201 +358,189 @@
 </div>
 
 <style>
-	.dash-page {
+	.filter-form {
 		display: flex;
 		flex-direction: column;
-		gap: 18px;
+		gap: 16px;
 	}
-	.head-row {
+
+	.preview-strip {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: start;
+	}
+
+	@media (max-width: 720px) {
+		.preview-strip {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	.preview-pair {
 		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		flex-wrap: wrap;
+		gap: 10px;
 	}
-	.dash-head .eyebrow {
-		margin: 0;
-		font-size: 0.66rem;
+
+	.swatch-box {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.swatch-lg {
+		width: 74px;
+		height: 92px;
+		border-radius: 12px;
+		border: 1px solid var(--d-border);
+		background: linear-gradient(145deg, #f59e0b 0%, #ef4444 35%, #3b82f6 70%, #10b981 100%);
+	}
+
+	.swatch-cap {
+		font-size: 0.68rem;
 		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.6;
+		color: var(--d-muted);
 	}
-	.dash-title {
-		margin: 6px 0 0;
-		font-size: 2rem;
-		line-height: 1.1;
-	}
-	.dash-sub {
-		margin: 8px 0 0;
-		max-width: 78ch;
-		font-size: 0.85rem;
-		line-height: 1.55;
-		opacity: 0.75;
-	}
-	.panel {
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		overflow: hidden;
-	}
-	.panel-head {
+
+	.preview-inputs {
 		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		min-width: 0;
+	}
+
+	.form-footer {
+		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
-		padding: 12px 14px;
-		border-bottom: 1px solid var(--color-base-300, #d6d3d1);
+		gap: 12px;
+		padding-top: 10px;
+		border-top: 1px solid var(--d-border);
 	}
-	.panel-body {
-		padding: 14px;
-	}
-	.section-title {
-		margin: 0;
-		font-size: 0.66rem;
+
+	.toggle-inline {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 0.78rem;
 		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.6;
+		color: var(--d-ink);
+		cursor: pointer;
 	}
-	.count {
-		font-size: 0.72rem;
-		opacity: 0.7;
+
+	.swatch {
+		width: 42px;
+		height: 42px;
+		border-radius: 10px;
+		border: 1px solid var(--d-border);
+		background: linear-gradient(135deg, #f59e0b, #ef4444, #3b82f6, #10b981);
+		flex-shrink: 0;
 	}
-	.form-grid {
-		display: grid;
-		gap: 10px;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		align-items: end;
-	}
-	.field {
+
+	.row-info {
+		flex: 1;
+		min-width: 200px;
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
 	}
-	.field.wide {
-		grid-column: span 2;
-		min-width: 220px;
-	}
-	.label {
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		opacity: 0.65;
-	}
-	.asset-list {
-		margin: 0;
-		padding: 0;
-		list-style: none;
+
+	.row-top {
 		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.asset-list.compact {
-		margin-top: 8px;
-	}
-	.asset-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 10px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: 10px;
-		background: var(--color-base-100, #fff);
 		flex-wrap: wrap;
-	}
-	.swatch {
-		width: 38px;
-		height: 38px;
-		border-radius: 8px;
-		background: linear-gradient(135deg, #f59e0b, #3b82f6, #10b981);
-		flex-shrink: 0;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-	}
-	.asset-main {
-		flex: 1;
-		min-width: 180px;
-	}
-	.asset-name {
-		margin: 0;
-		font-size: 0.88rem;
-		font-weight: 700;
-		display: flex;
 		align-items: center;
 		gap: 8px;
-		flex-wrap: wrap;
 	}
-	.asset-meta {
-		margin: 4px 0 0;
-		font-size: 0.68rem;
-		opacity: 0.7;
+
+	.row-name {
+		margin: 0;
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--d-ink);
+	}
+
+	.row-meta {
+		margin: 0;
+		font-size: 0.75rem;
+		color: var(--d-muted);
 		word-break: break-word;
 	}
-	.lock-tag,
-	.edit-tag {
-		font-size: 0.56rem;
+
+	.confirm-note {
+		font-size: 0.75rem;
 		font-weight: 700;
-		letter-spacing: 0.12em;
-		padding: 2px 6px;
-		border-radius: 999px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
+		color: var(--d-err);
 	}
-	.edit-tag {
-		border-color: #2563eb;
-		color: #1d4ed8;
-	}
-	.row-actions {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.panel-note {
-		margin: 0;
-		font-size: 0.85rem;
-		opacity: 0.75;
-	}
-	.toggle-label {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.1em;
-		align-self: center;
-	}
-	.builtin-details summary {
+
+	.builtin-fold summary {
 		cursor: pointer;
-		font-size: 0.72rem;
+		font-size: 0.8rem;
 		font-weight: 700;
-		letter-spacing: 0.1em;
+		color: var(--d-ink);
+		user-select: none;
 	}
+
 	.groups {
+		margin-top: 14px;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		margin-top: 10px;
-		max-height: 48vh;
-		overflow: auto;
+		gap: 16px;
+		max-height: 460px;
+		overflow-y: auto;
+		padding-right: 4px;
 	}
-	.group-name {
+
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.group-title {
 		margin: 0;
-		font-size: 0.64rem;
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--d-muted);
+	}
+
+	.builtin-grid {
+		display: grid;
+		gap: 8px;
+		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+	}
+
+	.builtin-tile {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 10px;
+		border: 1px solid var(--d-border);
+		border-radius: 12px;
+		background: var(--d-bg);
+	}
+
+	.tile-info {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.tile-name {
+		margin: 0;
+		font-size: 0.8rem;
 		font-weight: 700;
-		letter-spacing: 0.16em;
-		opacity: 0.7;
+		color: var(--d-ink);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
-	.alert {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		font-size: 0.82rem;
-	}
-	.alert-warning {
-		background: color-mix(in srgb, #f59e0b 12%, transparent);
-	}
-	.alert-success {
-		background: color-mix(in srgb, #22c55e 12%, transparent);
-	}
-	code {
-		font-size: 0.92em;
+
+	.tile-meta {
+		margin: 2px 0 0;
+		font-size: 0.7rem;
+		color: var(--d-muted);
 	}
 </style>

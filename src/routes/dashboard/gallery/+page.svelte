@@ -1,223 +1,219 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { RefreshCw, Search, Copy, Check, ExternalLink, Eye, Images } from '@lucide/svelte';
 
-	type SessionSummary = {
+	type GallerySummary = {
 		id: string;
-		createdAt: string;
-		photoCount: number;
-		templateKey: string;
+		createdAt?: string;
+		photoCount?: number;
+		templateKey?: string;
 		formatId?: string;
-		hasGif: boolean;
-		hasVideo: boolean;
+		hasGif?: boolean;
+		hasVideo?: boolean;
 	};
 
-	let sessions = $state<SessionSummary[]>([]);
+	let list = $state<GallerySummary[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let query = $state('');
+	let copiedId = $state<string | null>(null);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const filtered = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return list;
+		return list.filter(
+			(s) =>
+				s.id.toLowerCase().includes(q) ||
+				(s.formatId || '').toLowerCase().includes(q) ||
+				(s.templateKey || '').toLowerCase().includes(q)
+		);
+	});
+
+	function formatDate(iso?: string): string {
+		if (!iso) return '—';
+		const d = new Date(iso);
+		if (!Number.isFinite(d.getTime())) return iso;
+		return d.toLocaleString('id-ID', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
 
 	async function loadList(): Promise<void> {
 		loading = true;
 		error = null;
 		try {
 			const res = await fetch('/api/gallery?list=1&limit=60');
-			if (!res.ok) throw new Error(`Gagal memuat daftar (${res.status})`);
-			const data = (await res.json()) as { ok?: boolean; sessions?: SessionSummary[] };
-			sessions = Array.isArray(data.sessions) ? data.sessions : [];
+			if (!res.ok) throw new Error('Daftar galeri tidak tersedia');
+			const data = (await res.json()) as { sessions?: GallerySummary[] };
+			list = Array.isArray(data.sessions) ? data.sessions : [];
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat galeri.';
-			sessions = [];
+			list = [];
+			error = e instanceof Error ? e.message : 'Gagal memuat daftar galeri.';
 		} finally {
 			loading = false;
 		}
 	}
 
-	function fmtDate(iso: string): string {
-		try {
-			return new Date(iso).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-		} catch {
-			return iso;
-		}
-	}
-
-	function galleryLink(id: string): string {
-		return `/gallery/${id}`;
+	function copyLink(id: string): void {
+		if (typeof window === 'undefined') return;
+		const url = `${window.location.origin}/gallery/${encodeURIComponent(id)}`;
+		navigator.clipboard
+			.writeText(url)
+			.then(() => {
+				copiedId = id;
+				if (copyTimer) clearTimeout(copyTimer);
+				copyTimer = setTimeout(() => (copiedId = null), 2200);
+			})
+			.catch(() => {
+				error = 'Gagal menyalin tautan galeri ke clipboard.';
+			});
 	}
 
 	onMount(() => {
 		void loadList();
 	});
+
+	onDestroy(() => {
+		if (copyTimer) clearTimeout(copyTimer);
+	});
 </script>
 
-<div class="dash-page">
-	<header class="dash-head">
-		<div class="head-row">
-			<div>
-				<p class="eyebrow font-mono">ADMIN · GALLERY</p>
-				<h1 class="dash-title font-display">Gallery</h1>
-				<p class="dash-sub">
-					Sesi galeri tamu (QR). Riwayat dan output foto digabung di halaman Session; di sini fokus
-					ke tautan galeri yang bisa dibuka tamu.
-				</p>
-			</div>
-			<button type="button" class="btn btn-outline btn-sm" onclick={loadList} disabled={loading}>
-				{loading ? 'Memuat…' : 'Muat ulang'}
+<div class="d-page">
+	<header class="d-head">
+		<div>
+			<p class="d-eyebrow">TAUTAN TAMU</p>
+			<h1 class="d-title">Galeri QR</h1>
+			<p class="d-sub">
+				Kelola tautan galeri tamu yang dibagikan melalui QR code. Salin tautan, buka pratinjau
+				langsung, atau lompat ke detail sesi.
+			</p>
+		</div>
+		<div class="d-actions">
+			<button type="button" class="d-btn" onclick={loadList} disabled={loading}>
+				<RefreshCw size={14} />
+				{loading ? 'Memuat…' : 'Muat Ulang'}
 			</button>
 		</div>
 	</header>
 
-	{#if error}
-		<div class="alert alert-warning" role="status">
-			<span
-				>{error} Galeri server butuh runtime Node dengan akses disk ke
-				<code>.gallery_cache</code>.</span
-			>
+	<div class="gallery-toolbar">
+		<div class="d-search-wrap">
+			<Search size={15} />
+			<input
+				type="search"
+				class="d-input"
+				placeholder="Cari ID galeri atau format…"
+				bind:value={query}
+				aria-label="Cari galeri"
+			/>
 		</div>
+		<span class="d-pill d-num">{filtered.length} galeri</span>
+	</div>
+
+	{#if error}
+		<div class="d-banner d-banner-err" role="alert">{error}</div>
 	{/if}
 
-	<section class="panel" aria-label="Daftar galeri">
-		<div class="panel-head">
-			<h2 class="section-title font-mono">TAUTAN GALERI</h2>
-			<span class="count font-mono">{sessions.length}</span>
-		</div>
-		<div class="panel-body">
-			{#if loading}
-				<p class="panel-note">Memuat galeri…</p>
-			{:else if sessions.length === 0}
-				<p class="panel-note">Belum ada sesi galeri tersimpan.</p>
-			{:else}
-				<ul class="session-list">
-					{#each sessions as s (s.id)}
-						<li class="gallery-row">
-							<div class="row-main">
-								<span class="row-id font-mono">{s.id}</span>
-								<span class="row-meta">{fmtDate(s.createdAt)} · {s.photoCount} foto</span>
+	<section class="d-card" aria-label="Daftar tautan galeri">
+		{#if loading}
+			<div class="d-empty">Memuat daftar galeri…</div>
+		{:else if filtered.length === 0}
+			<div class="d-empty">
+				<Images size={26} />
+				<p class="d-empty-title">Belum ada galeri tersimpan</p>
+				<span>Galeri akan otomatis tercatat setelah tamu menyelesaikan sesi di halaman cetak.</span>
+			</div>
+		{:else}
+			<div class="d-list">
+				{#each filtered as s (s.id)}
+					<div class="d-row">
+						<div class="gal-info">
+							<div class="gal-top">
+								<span class="gal-id d-num">#{s.id}</span>
+								<span class="d-pill d-num">{s.photoCount ?? 0} foto</span>
+								{#if s.formatId || s.templateKey}
+									<span class="d-pill">{s.formatId || s.templateKey}</span>
+								{/if}
+								{#if s.hasVideo}
+									<span class="d-pill d-pill-info">MP4</span>
+								{/if}
+								{#if s.hasGif}
+									<span class="d-pill d-pill-warn">GIF</span>
+								{/if}
 							</div>
-							<div class="row-actions">
-								<a
-									class="btn btn-outline btn-xs"
-									href={galleryLink(s.id)}
-									target="_blank"
-									rel="noopener noreferrer">Buka galeri</a
-								>
-								<a class="btn btn-ghost btn-xs" href="/dashboard/sessions">Lihat output</a>
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</div>
+							<p class="gal-meta">
+								{formatDate(s.createdAt)} · <span>/gallery/{s.id}</span>
+							</p>
+						</div>
+
+						<div class="d-actions">
+							<button type="button" class="d-btn d-btn-sm" onclick={() => copyLink(s.id)}>
+								{#if copiedId === s.id}
+									<Check size={13} />
+									Tersalin
+								{:else}
+									<Copy size={13} />
+									Salin Link
+								{/if}
+							</button>
+							<a class="d-btn d-btn-sm" href={`/dashboard/sessions?id=${encodeURIComponent(s.id)}`}>
+								<Eye size={13} />
+								Detail Sesi
+							</a>
+							<a
+								class="d-btn d-btn-sm d-btn-primary"
+								href={`/gallery/${encodeURIComponent(s.id)}`}
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								Buka
+								<ExternalLink size={13} />
+							</a>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</section>
 </div>
 
 <style>
-	.dash-page {
+	.gallery-toolbar {
 		display: flex;
-		flex-direction: column;
-		gap: 18px;
-	}
-	.head-row {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
 		flex-wrap: wrap;
-	}
-	.dash-head .eyebrow {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.6;
-	}
-	.dash-title {
-		margin: 6px 0 0;
-		font-size: 2rem;
-		line-height: 1.1;
-	}
-	.dash-sub {
-		margin: 8px 0 0;
-		max-width: 62ch;
-		font-size: 0.85rem;
-		line-height: 1.55;
-		opacity: 0.7;
-	}
-	.panel {
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		overflow: hidden;
-	}
-	.panel-head {
-		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		padding: 12px 14px;
-		border-bottom: 1px solid var(--color-base-300, #d6d3d1);
 	}
-	.panel-body {
-		padding: 14px;
-	}
-	.section-title {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		opacity: 0.6;
-	}
-	.count {
-		font-size: 0.72rem;
-		opacity: 0.7;
-	}
-	.panel-note {
-		margin: 0;
-		font-size: 0.85rem;
-		opacity: 0.75;
-	}
-	.session-list {
-		margin: 0;
-		padding: 0;
-		list-style: none;
+
+	.gal-info {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 5px;
+		min-width: 0;
 	}
-	.gallery-row {
+
+	.gal-top {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
-		padding: 12px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: 10px;
-		background: var(--color-base-100, #fff);
 		flex-wrap: wrap;
-	}
-	.row-main {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.row-id {
-		font-size: 0.78rem;
-		font-weight: 700;
-	}
-	.row-meta {
-		font-size: 0.72rem;
-		opacity: 0.7;
-	}
-	.row-actions {
-		display: flex;
+		align-items: center;
 		gap: 6px;
-		flex-wrap: wrap;
 	}
-	.alert {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		font-size: 0.82rem;
+
+	.gal-id {
+		font-size: 0.88rem;
+		font-weight: 800;
+		color: var(--d-ink);
 	}
-	.alert-warning {
-		background: color-mix(in srgb, #f59e0b 12%, transparent);
+
+	.gal-meta {
+		margin: 0;
+		font-size: 0.76rem;
+		color: var(--d-muted);
 	}
 </style>

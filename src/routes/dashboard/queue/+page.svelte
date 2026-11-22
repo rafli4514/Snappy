@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	type Summary = Record<string, { total: number; pending: number; failed: number; done: number }>;
+	type QueueStat = { total: number; pending: number; failed: number; done: number };
+	type Summary = Record<string, QueueStat>;
+
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let summary = $state<Summary>({});
@@ -18,11 +20,11 @@
 				context?: typeof context;
 				error?: string;
 			};
-			if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal memuat ringkasan antrian.');
+			if (!res.ok || !data.ok) throw new Error(data.error || 'Gagal memuat ringkasan antrean.');
 			summary = data.summary || {};
 			context = data.context || {};
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Gagal memuat ringkasan antrian.';
+			error = e instanceof Error ? e.message : 'Gagal memuat ringkasan antrean.';
 		} finally {
 			loading = false;
 		}
@@ -30,160 +32,277 @@
 
 	onMount(() => void load());
 
-	function s(key: string) {
+	function statOf(key: string): QueueStat {
 		return summary[key] || { total: 0, pending: 0, failed: 0, done: 0 };
 	}
+
+	let totalItems = $derived(
+		statOf('print').total + statOf('cloud-sync').total + statOf('upload').total
+	);
+	let totalPending = $derived(
+		statOf('print').pending + statOf('cloud-sync').pending + statOf('upload').pending
+	);
+	let totalFailed = $derived(
+		statOf('print').failed + statOf('cloud-sync').failed + statOf('upload').failed
+	);
 </script>
 
-<div class="dash-page">
-	<header class="dash-head">
-		<div class="head-row">
-			<div>
-				<p class="eyebrow font-mono">ADMIN · QUEUE</p>
-				<h1 class="dash-title font-display">Queue</h1>
-				<p class="dash-sub">
-					Antrian <strong>MVP lokal</strong> (file-backed, Node + disk tulis) untuk print, cloud
-					sync, dan upload.
-					<strong>Bukan</strong> backend cloud/distributed/OS spooler. Status jujur; tanpa data palsu.
-				</p>
-			</div>
-			<button type="button" class="btn btn-outline btn-sm" onclick={load} disabled={loading}
-				>Muat ulang</button
-			>
+<div class="d-page">
+	<header class="d-head">
+		<div>
+			<p class="d-eyebrow">Admin · Antrean</p>
+			<h1 class="d-title">Antrean Lokal</h1>
+			<p class="d-sub">
+				Pelacakan lokal berbasis berkas (Node + penyimpanan disk) untuk cetak, sinkronisasi cloud,
+				dan unggahan. Bukan layanan antrean cloud terdistribusi atau OS print spooler.
+			</p>
+		</div>
+		<div class="d-actions">
+			<button type="button" class="d-btn" onclick={load} disabled={loading}>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+					<polyline points="21 3 21 9 15 9" />
+				</svg>
+				<span>{loading ? 'Memuat…' : 'Muat Ulang'}</span>
+			</button>
 		</div>
 	</header>
 
-	{#if error}<div class="alert alert-warning" role="status"><span>{error}</span></div>{/if}
+	{#if error}
+		<div class="d-banner d-banner-warn" role="status">
+			<span>{error}</span>
+		</div>
+	{/if}
 
-	<section class="asset-grid" aria-label="Daftar queue">
-		<a class="asset-card" href="/dashboard/queue/print">
-			<p class="asset-name">Print queue</p>
-			<p class="asset-desc">
-				Log lokal percobaan print via <code>/api/print</code> (PowerShell → printer Windows).
-			</p>
-			<div class="counts font-mono">
-				<span>total {loading ? '…' : s('print').total}</span>
-				<span>pending {loading ? '…' : s('print').pending}</span>
-				<span>gagal {loading ? '…' : s('print').failed}</span>
+	<section class="d-kpi-grid" aria-label="Ringkasan antrean">
+		<div class="d-kpi">
+			<div class="d-kpi-top">
+				<p class="d-kpi-label">Total Item</p>
+				<span class="d-kpi-icon" aria-hidden="true">
+					<svg
+						width="17"
+						height="17"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<line x1="8" y1="6" x2="21" y2="6" />
+						<line x1="8" y1="12" x2="21" y2="12" />
+						<line x1="8" y1="18" x2="21" y2="18" />
+						<line x1="3" y1="6" x2="3.01" y2="6" />
+						<line x1="3" y1="12" x2="3.01" y2="12" />
+						<line x1="3" y1="18" x2="3.01" y2="18" />
+					</svg>
+				</span>
 			</div>
-			<span class="asset-status">MVP LOKAL</span>
+			<p class="d-kpi-val">{loading ? '—' : totalItems}</p>
+			<p class="d-kpi-hint">Gabungan seluruh antrean lokal</p>
+		</div>
+
+		<div class="d-kpi">
+			<div class="d-kpi-top">
+				<p class="d-kpi-label">Tertunda / Gagal</p>
+				<span class="d-kpi-icon" aria-hidden="true">
+					<svg
+						width="17"
+						height="17"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<polyline points="12 6 12 12 16 14" />
+					</svg>
+				</span>
+			</div>
+			<p class="d-kpi-val">{loading ? '—' : totalPending + totalFailed}</p>
+			<p class="d-kpi-hint d-num">
+				{loading ? 'Memuat…' : `${totalPending} tertunda · ${totalFailed} gagal`}
+			</p>
+		</div>
+
+		<div class="d-kpi">
+			<div class="d-kpi-top">
+				<p class="d-kpi-label">Sesi Galeri Lokal</p>
+				<span class="d-kpi-icon" aria-hidden="true">
+					<svg
+						width="17"
+						height="17"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<rect x="3" y="3" width="18" height="18" rx="2" />
+						<circle cx="8.5" cy="8.5" r="1.5" />
+						<polyline points="21 15 16 10 5 21" />
+					</svg>
+				</span>
+			</div>
+			<p class="d-kpi-val">{loading ? '—' : (context.gallerySessions ?? 0)}</p>
+			<p class="d-kpi-hint">Tersimpan di perangkat ini</p>
+		</div>
+
+		<div class="d-kpi">
+			<div class="d-kpi-top">
+				<p class="d-kpi-label">Aset Kustom</p>
+				<span class="d-kpi-icon" aria-hidden="true">
+					<svg
+						width="17"
+						height="17"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polygon points="12 2 2 7 12 12 22 7 12 2" />
+						<polyline points="2 17 12 22 22 17" />
+						<polyline points="2 12 12 17 22 12" />
+					</svg>
+				</span>
+			</div>
+			<p class="d-kpi-val">{loading ? '—' : (context.customAssets ?? 0)}</p>
+			<p class="d-kpi-hint">Stiker, filter, AR & ukuran aktif</p>
+		</div>
+	</section>
+
+	<section class="d-hub-grid" aria-label="Daftar antrean">
+		<a class="d-hub-card" href="/dashboard/queue/print">
+			<div class="d-hub-top">
+				<span class="d-hub-icon" aria-hidden="true">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="6 9 6 2 18 2 18 9" />
+						<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+						<rect x="6" y="14" width="12" height="8" />
+					</svg>
+				</span>
+				<span class="d-pill">MVP Lokal</span>
+			</div>
+			<div>
+				<p class="d-hub-name">Antrean Cetak</p>
+				<p class="d-hub-desc">
+					Log lokal percobaan cetak melalui endpoint cetak ke printer Windows.
+				</p>
+			</div>
+			<div class="stat-pills d-num">
+				<span class="d-pill">Total {loading ? '…' : statOf('print').total}</span>
+				{#if !loading && statOf('print').pending > 0}
+					<span class="d-pill d-pill-warn">Tertunda {statOf('print').pending}</span>
+				{/if}
+				{#if !loading && statOf('print').failed > 0}
+					<span class="d-pill d-pill-err">Gagal {statOf('print').failed}</span>
+				{/if}
+				{#if !loading && statOf('print').done > 0}
+					<span class="d-pill d-pill-ok">Selesai {statOf('print').done}</span>
+				{/if}
+			</div>
 		</a>
-		<a class="asset-card" href="/dashboard/queue/cloud-sync">
-			<p class="asset-name">Cloud sync</p>
-			<p class="asset-desc">
-				Pelacakan lokal niat/calon sinkronisasi. <strong>Belum ada backend cloud sync.</strong>
-			</p>
-			<div class="counts font-mono">
-				<span>sesi lokal {loading ? '…' : (context.gallerySessions ?? 0)}</span>
-				<span>item {loading ? '…' : s('cloud-sync').total}</span>
+
+		<a class="d-hub-card" href="/dashboard/queue/cloud-sync">
+			<div class="d-hub-top">
+				<span class="d-hub-icon" aria-hidden="true">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+					</svg>
+				</span>
+				<span class="d-pill">MVP Lokal</span>
 			</div>
-			<span class="asset-status">MVP LOKAL</span>
+			<div>
+				<p class="d-hub-name">Sinkronisasi Cloud</p>
+				<p class="d-hub-desc">
+					Penanda lokal calon sinkronisasi. Belum terhubung ke backend cloud eksternal.
+				</p>
+			</div>
+			<div class="stat-pills d-num">
+				<span class="d-pill">Sesi {loading ? '…' : (context.gallerySessions ?? 0)}</span>
+				<span class="d-pill">Item {loading ? '…' : statOf('cloud-sync').total}</span>
+				{#if !loading && statOf('cloud-sync').pending > 0}
+					<span class="d-pill d-pill-warn">Tertunda {statOf('cloud-sync').pending}</span>
+				{/if}
+			</div>
 		</a>
-		<a class="asset-card" href="/dashboard/queue/upload">
-			<p class="asset-name">Upload queue</p>
-			<p class="asset-desc">
-				Upload aset kini langsung via API; halaman ini untuk pelacakan lokal/MVP.
-			</p>
-			<div class="counts font-mono">
-				<span>aset custom {loading ? '…' : (context.customAssets ?? 0)}</span>
-				<span>item {loading ? '…' : s('upload').total}</span>
+
+		<a class="d-hub-card" href="/dashboard/queue/upload">
+			<div class="d-hub-top">
+				<span class="d-hub-icon" aria-hidden="true">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="17 8 12 3 7 8" />
+						<line x1="12" y1="3" x2="12" y2="15" />
+					</svg>
+				</span>
+				<span class="d-pill">MVP Lokal</span>
 			</div>
-			<span class="asset-status">MVP LOKAL</span>
+			<div>
+				<p class="d-hub-name">Antrean Unggahan</p>
+				<p class="d-hub-desc">
+					Unggah aset langsung via API; halaman ini berfungsi sebagai pelacak unggahan lokal.
+				</p>
+			</div>
+			<div class="stat-pills d-num">
+				<span class="d-pill">Aset {loading ? '…' : (context.customAssets ?? 0)}</span>
+				<span class="d-pill">Item {loading ? '…' : statOf('upload').total}</span>
+				{#if !loading && statOf('upload').failed > 0}
+					<span class="d-pill d-pill-err">Gagal {statOf('upload').failed}</span>
+				{/if}
+			</div>
 		</a>
 	</section>
 </div>
 
 <style>
-	.dash-page {
+	.stat-pills {
 		display: flex;
-		flex-direction: column;
-		gap: 22px;
-	}
-	.head-row {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
 		flex-wrap: wrap;
-	}
-	.dash-head .eyebrow {
-		margin: 0;
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		opacity: 0.6;
-	}
-	.dash-title {
-		margin: 6px 0 0;
-		font-size: 2rem;
-		line-height: 1.1;
-	}
-	.dash-sub {
-		margin: 8px 0 0;
-		max-width: 72ch;
-		font-size: 0.85rem;
-		line-height: 1.55;
-		opacity: 0.75;
-	}
-	.asset-grid {
-		display: grid;
-		gap: 12px;
-		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-	}
-	.asset-card {
-		display: flex;
-		flex-direction: column;
 		gap: 6px;
-		padding: 16px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		border-radius: var(--radius-box, 12px);
-		background: var(--color-base-200, #f5f5f4);
-		text-decoration: none;
-		color: inherit;
-	}
-	.asset-card:hover {
-		border-color: var(--color-base-content, #1c1917);
-	}
-	.asset-name {
-		margin: 0;
-		font-size: 1rem;
-		font-weight: 700;
-	}
-	.asset-desc {
-		margin: 0;
-		font-size: 0.76rem;
-		line-height: 1.45;
-		opacity: 0.7;
-	}
-	.counts {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 4px;
-		font-size: 0.66rem;
-		opacity: 0.75;
-	}
-	.asset-status {
-		align-self: flex-start;
-		margin-top: 6px;
-		padding: 3px 8px;
-		border-radius: 9999px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.12em;
-	}
-	.alert {
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid var(--color-base-300, #d6d3d1);
-		font-size: 0.82rem;
-	}
-	.alert-warning {
-		background: color-mix(in srgb, #f59e0b 12%, transparent);
-	}
-	code {
-		font-size: 0.92em;
+		margin-top: auto;
+		padding-top: 4px;
 	}
 </style>
