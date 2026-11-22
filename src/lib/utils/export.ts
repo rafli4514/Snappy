@@ -43,11 +43,7 @@ const PRINT_DPI = 300;
 
 /**
  * Prepare the hidden #print-layout element with the export image,
- * then trigger window.print().
- *
- * Ukuran kertas dan kotak cetak diambil dari kanvas hasil render, bukan
- * angka tetap: setiap format punya rasio sendiri, dan memaksa semuanya
- * ke 4 × 6 inci membuat strip gepeng.
+ * then trigger direct Windows print (when configured) or window.print().
  */
 export async function printStrip(
 	photoDataUrls: string[],
@@ -55,6 +51,54 @@ export async function printStrip(
 	options: RenderOptions
 ): Promise<void> {
 	const canvas = await renderExportCanvas(photoDataUrls, templateKey, options);
+	const dataUrl = canvas.toDataURL('image/png');
+
+	// Cek konfigurasi cetak perangkat di server (bila mode direct aktif)
+	interface DevicePrintConfig {
+		printMode?: 'browser' | 'direct';
+		printerName?: string;
+		layoutMode?: 'fit' | 'fill' | 'stretch';
+		splitMode?: 'none' | '2-strip';
+		autoRotate?: boolean;
+		copies?: number;
+		fallbackToBrowser?: boolean;
+	}
+
+	let cfg: DevicePrintConfig | null = null;
+
+	try {
+		const res = await fetch('/api/settings/device');
+		if (res.ok) {
+			const data = (await res.json()) as { ok?: boolean; config?: DevicePrintConfig };
+			if (data?.ok && data.config) cfg = data.config;
+		}
+	} catch {
+		// abaikan — lanjut pakai dialog browser
+	}
+
+	if (cfg?.printMode === 'direct' && cfg.printerName) {
+		try {
+			const res = await fetch('/api/print', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					image: dataUrl,
+					printerName: cfg.printerName,
+					layoutMode: cfg.layoutMode ?? 'fit',
+					splitMode: cfg.splitMode ?? 'none',
+					autoRotate: cfg.autoRotate ?? true,
+					copies: cfg.copies ?? 1
+				})
+			});
+			const out = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
+			if (res.ok && out.success) return;
+			if (!cfg.fallbackToBrowser) {
+				throw new Error(out.error || 'Gagal mencetak ke printer Windows.');
+			}
+		} catch (err) {
+			if (!cfg.fallbackToBrowser) throw err;
+		}
+	}
 
 	const printLayout = document.getElementById('print-layout');
 	if (!printLayout) {
@@ -75,12 +119,23 @@ export async function printStrip(
 	}
 	pageSizeStyle.textContent = `@page { size: ${wIn.toFixed(3)}in ${hIn.toFixed(3)}in; margin: 0; }`;
 
-	// Convert to data URL for the img tag
-	const dataUrl = canvas.toDataURL('image/png');
 	const img = printLayout.querySelector('img');
 	if (img) {
 		img.src = dataUrl;
 	}
+
+	// Catat log cetak dialog browser (non-blocking)
+	void fetch('/api/queue', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			type: 'print',
+			status: 'done',
+			title: 'Cetak via Dialog Browser',
+			detail: `Ukuran ${canvas.width} × ${canvas.height} px (${wIn.toFixed(1)} × ${hIn.toFixed(1)} in)`,
+			source: 'browser-print'
+		})
+	}).catch(() => undefined);
 
 	// Small delay to let the browser paint the image before printing
 	await new Promise((r) => setTimeout(r, 100));

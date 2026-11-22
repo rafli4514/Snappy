@@ -1,18 +1,22 @@
 /**
  * Print endpoint
- * Uses PowerShell PrintDocument to send an image to a printer.
+ * Uses PowerShell PrintDocument to send an image to a Windows printer.
  *
  * POST /api/print
- * Body: { image, printerName, layoutMode, autoRotate, splitMode, bleed, offsetX, offsetY, copies }
- * Returns: { success: boolean, jobId?: string, error?: string }
+ * Body: { image, printerName?, layoutMode?, autoRotate?, splitMode?, copies?, title? }
+ * Returns: { success: boolean, output?: string, error?: string }
  */
 
 import { json } from '@sveltejs/kit';
 import { execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
+import { getDeviceConfig } from '#lib/server/deviceConfigStore';
 import { enqueue } from '#lib/server/queueStore';
 
-function logPrint(status: 'done' | 'failed' | 'skipped', detail: string, title = 'Print'): void {
+function logPrint(status: 'done' | 'failed' | 'skipped', detail: string, title = 'Cetak'): void {
 	try {
 		enqueue({ type: 'print', status, title, detail, source: 'api/print' });
 	} catch {
@@ -28,164 +32,184 @@ interface PrintRequest {
 	layoutMode?: 'stretch' | 'fit' | 'fill';
 	autoRotate?: boolean;
 	splitMode?: 'none' | '2-strip';
-	bleed?: number;
-	offsetX?: number;
-	offsetY?: number;
 	copies?: number;
+	title?: string;
 }
 
-export async function POST({ request }: { request: Request }) {
-	try {
-		const body: PrintRequest = await request.json();
-		const {
-			image,
-			printerName = '',
-			layoutMode = 'fit',
-			autoRotate = true,
-			splitMode = 'none',
-			bleed = 0,
-			offsetX = 0,
-			offsetY = 0,
-			copies = 1
-		} = body;
+const PRINT_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 
-		if (!printerName) {
-			logPrint('failed', 'Tidak ada printer dipilih.');
+$printerName = $env:DISTUDIO_PRINTER
+$imgPath = $env:DISTUDIO_IMG_PATH
+$layoutMode = $env:DISTUDIO_LAYOUT
+$splitMode = $env:DISTUDIO_SPLIT
+$autoRotate = $env:DISTUDIO_AUTOROTATE -eq '1'
+$copies = [Math]::Max(1, [int]$env:DISTUDIO_COPIES)
+
+$Printer = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq $printerName }
+if (-not $Printer) { throw "Printer '$printerName' tidak ditemukan pada sistem." }
+if ($Printer.WorkOffline -or $Printer.PrinterStatus -eq 7) { throw 'Printer sedang Offline.' }
+if (@(4,7,8,9) -contains $Printer.DetectedErrorState) { throw "Printer bermasalah (Error State $($Printer.DetectedErrorState))." }
+
+$img = [System.Drawing.Image]::FromFile($imgPath)
+try {
+    $doc = New-Object System.Drawing.Printing.PrintDocument
+    $doc.PrinterSettings.PrinterName = $printerName
+    $doc.PrinterSettings.Copies = $copies
+
+    $drawWithLayout = {
+        param($g, $image, $rect, $mode)
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $imRatio = $image.Width / $image.Height
+        $rectRatio = $rect.Width / $rect.Height
+        if ($mode -eq 'stretch') {
+            $g.DrawImage($image, $rect)
+        } elseif ($mode -eq 'fill') {
+            if ($imRatio -gt $rectRatio) {
+                $srcW = [int]($image.Height * $rectRatio)
+                $srcH = $image.Height
+            } else {
+                $srcW = $image.Width
+                $srcH = [int]($image.Width / $rectRatio)
+            }
+            $srcX = [int](($image.Width - $srcW) / 2)
+            $srcY = [int](($image.Height - $srcH) / 2)
+            $srcRect = New-Object System.Drawing.Rectangle($srcX, $srcY, $srcW, $srcH)
+            $g.DrawImage($image, $rect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
+        } else {
+            if ($imRatio -gt $rectRatio) {
+                $drawW = $rect.Width
+                $drawH = [int]($rect.Width / $imRatio)
+            } else {
+                $drawH = $rect.Height
+                $drawW = [int]($rect.Height * $imRatio)
+            }
+            $x = [int]($rect.X + ($rect.Width - $drawW) / 2)
+            $y = [int]($rect.Y + ($rect.Height - $drawH) / 2)
+            $destRect = New-Object System.Drawing.Rectangle($x, $y, $drawW, $drawH)
+            $g.DrawImage($image, $destRect)
+        }
+    }
+
+    $doc.add_PrintPage({
+        param($sender, $e)
+        $g = $e.Graphics
+        $bounds = $e.PageBounds
+        $targetW = if ($splitMode -eq '2-strip') { [int][Math]::Floor($bounds.Width / 2) } else { $bounds.Width }
+        $targetH = $bounds.Height
+        if ($autoRotate -and (($img.Width -gt $img.Height -and $targetW -lt $targetH) -or ($img.Height -gt $img.Width -and $targetW -gt $targetH))) {
+            $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone)
+        }
+        if ($splitMode -eq '2-strip') {
+            $halfW = [int][Math]::Floor($bounds.Width / 2)
+            $leftRect = New-Object System.Drawing.Rectangle($bounds.X, $bounds.Y, $halfW, $bounds.Height)
+            $rightRect = New-Object System.Drawing.Rectangle(($bounds.X + $halfW), $bounds.Y, $halfW, $bounds.Height)
+            & $drawWithLayout $g $img $leftRect $layoutMode
+            & $drawWithLayout $g $img $rightRect $layoutMode
+        } else {
+            & $drawWithLayout $g $img $bounds $layoutMode
+        }
+        $e.HasMorePages = $false
+    })
+
+    $doc.Print()
+    $doc.Dispose()
+} finally {
+    $img.Dispose()
+}
+`;
+
+export async function POST({ request }: { request: Request }) {
+	let tempPath: string | null = null;
+	try {
+		if (process.platform !== 'win32') {
+			logPrint('failed', 'Cetak langsung Windows hanya tersedia di perangkat Windows.');
 			return json(
-				{ success: false, error: 'print_queue: No printer selected in settings!' },
+				{ success: false, error: 'Cetak langsung hanya didukung pada sistem operasi Windows.' },
 				{ status: 400 }
 			);
 		}
 
-		// Build PowerShell script for PrintDocument
-		const psScript = buildPrintScript({
-			image,
-			printerName,
-			layoutMode,
-			autoRotate,
-			splitMode,
-			bleed,
-			offsetX,
-			offsetY,
-			copies
-		});
+		const saved = getDeviceConfig();
+		const body = (await request.json()) as PrintRequest;
+		const image = typeof body.image === 'string' ? body.image : '';
+		const printerName = (body.printerName ?? saved.printerName ?? '').trim();
+		const layoutMode = body.layoutMode ?? saved.layoutMode ?? 'fit';
+		const autoRotate = typeof body.autoRotate === 'boolean' ? body.autoRotate : saved.autoRotate;
+		const splitMode = body.splitMode ?? saved.splitMode ?? 'none';
+		const copies = Math.max(1, Math.min(10, Math.round(Number(body.copies ?? saved.copies) || 1)));
+		const jobTitle = body.title?.trim() || `Cetak (${printerName || 'Printer'})`;
+
+		if (!image || !image.includes(',')) {
+			logPrint('failed', 'Data gambar cetak tidak valid.', jobTitle);
+			return json({ success: false, error: 'Data gambar cetak tidak valid.' }, { status: 400 });
+		}
+
+		if (!printerName) {
+			logPrint('failed', 'Belum ada printer yang dipilih di Pengaturan.', 'Cetak gagal');
+			return json(
+				{ success: false, error: 'Belum ada printer dipilih di Pengaturan.' },
+				{ status: 400 }
+			);
+		}
+
+		const b64 = image.split(',')[1] || '';
+		const buf = Buffer.from(b64, 'base64');
+		if (buf.length === 0) {
+			logPrint('failed', 'Berkas gambar cetak kosong.', jobTitle);
+			return json({ success: false, error: 'Berkas gambar cetak kosong.' }, { status: 400 });
+		}
+
+		tempPath = path.join(
+			os.tmpdir(),
+			`distudio-print-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`
+		);
+		await fs.writeFile(tempPath, buf);
 
 		try {
 			const { stdout, stderr } = await execFileAsync(
 				'powershell',
-				['-NoProfile', '-Command', psScript],
+				['-NoProfile', '-Command', PRINT_SCRIPT],
 				{
 					timeout: 60000,
-					maxBuffer: 1024 * 1024
+					maxBuffer: 1024 * 1024,
+					env: {
+						...process.env,
+						DISTUDIO_PRINTER: printerName,
+						DISTUDIO_IMG_PATH: tempPath,
+						DISTUDIO_LAYOUT: layoutMode,
+						DISTUDIO_SPLIT: splitMode,
+						DISTUDIO_AUTOROTATE: autoRotate ? '1' : '0',
+						DISTUDIO_COPIES: String(copies)
+					}
 				}
 			);
 
-			if (stderr) {
-				logPrint('failed', stderr.trim().slice(0, 400), `Print gagal (${printerName})`);
-				return json({ success: false, error: stderr.trim() }, { status: 500 });
+			if (stderr && stderr.trim()) {
+				const errText = stderr.trim().slice(0, 400);
+				logPrint('failed', errText, `${jobTitle} gagal`);
+				return json({ success: false, error: errText }, { status: 500 });
 			}
 
 			logPrint(
 				'done',
-				`Printer: ${printerName} · copies: ${copies} · ${splitMode}`,
-				`Print terkirim (${printerName})`
+				`Printer: ${printerName} · ${copies} salinan · layout ${layoutMode} · split ${splitMode}`,
+				jobTitle
 			);
 			return json({ success: true, output: stdout.trim() });
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
-			logPrint('failed', msg.slice(0, 400), `Print gagal (${printerName})`);
-			return json({ success: false, error: `PowerShell error: ${msg}` }, { status: 500 });
+			logPrint('failed', msg.slice(0, 400), `${jobTitle} gagal`);
+			return json({ success: false, error: msg }, { status: 500 });
 		}
 	} catch (err: unknown) {
-		const msg = err instanceof Error ? err.message : 'Unknown error';
-		logPrint('failed', msg.slice(0, 400));
+		const msg = err instanceof Error ? err.message : 'Gagal memproses cetak.';
+		logPrint('failed', msg.slice(0, 400), 'Cetak gagal');
 		return json({ success: false, error: msg }, { status: 500 });
-	}
-}
-
-function buildPrintScript(opts: PrintRequest & { image: string }): string {
-	const { image, printerName, layoutMode, autoRotate, splitMode, bleed, offsetX, offsetY, copies } =
-		opts;
-
-	// Decode data URL to base64 for PowerShell
-	const b64 = image.split(',')[1] || '';
-
-	return `
-$ErrorActionPreference = 'Stop'
-$Printer = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq '${printerName}' }
-if (-not $Printer) { throw "Printer '${printerName}' not found on this system" }
-if ($Printer.WorkOffline -or $Printer.PrinterStatus -eq 7) { throw 'Printer is Offline' }
-if (@(4,7,8,9) -contains $Printer.DetectedErrorState) { throw "Printer Error: State $($Printer.DetectedErrorState)" }
-
-# Create print document
-$doc = New-Object System.Drawing.Printing.PrintDocument
-$doc.PrinterSettings.PrinterName = '${printerName}'
-$doc.PrinterSettings.Copies = ${copies}
-
-# Draw image with layout mode
-function DrawWithLayout($g, $img, $rect, $mode) {
-    $imRatio = $img.Width / $img.Height
-    $rectRatio = $rect.Width / $rect.Height
-    switch ($mode) {
-        'stretch' { $g.DrawImage($img, $rect) }
-        'fit' {
-            if ($imRatio -gt $rectRatio) {
-                $drawW = $rect.Width
-                $drawH = $rect.Width / $imRatio
-            } else {
-                $drawH = $rect.Height
-                $drawW = $rect.Height * $imRatio
-            }
-            $x = $rect.X + ($rect.Width - $drawW) / 2
-            $y = $rect.Y + ($rect.Height - $drawH) / 2
-            $g.DrawImage($img, [System.Drawing.Rectangle]::FromLTRB($x, $y, $x + $drawW, $y + $drawH))
-        }
-        'fill' {
-            # Cover + center-crop
-            if ($imRatio -gt $rectRatio) {
-                $srcW = $img.Height * $rectRatio
-                $srcH = $img.Height
-            } else {
-                $srcW = $img.Width
-                $srcH = $img.Width / $rectRatio
-            }
-            $srcX = ($img.Width - $srcW) / 2
-            $srcY = ($img.Height - $srcH) / 2
-            $g.DrawImage($img, $rect, $srcX, $srcY, $srcW, $srcH, [System.Drawing.GraphicsUnit]::Pixel)
-        }
-    }
-}
-
-# Geometry
-$targetX = ${offsetX}
-$targetY = ${offsetY}
-$targetW = ${splitMode === '2-strip' ? '([Math]::Floor([System.Drawing.Printing.PageSettings]::PaperSize.Width / 2))' : '[System.Drawing.Printing.PageSettings]::PaperSize.Width'}
-$targetH = ${'[System.Drawing.Printing.PageSettings]::PaperSize.Height'}
-
-# Convert base64 image
-$imgBytes = [Convert]::FromBaseString('${b64}')
-$ms = New-Object System.IO.MemoryStream($imgBytes)
-$img = [System.Drawing.Image]::FromStream($ms)
-
-# Auto-rotate if needed
-${autoRotate ? '$if ($img.Width -gt $img.Height -and $targetW -lt $targetH) -or ($img.Height -gt $img.Width -and $targetW -gt $targetH) { $img.RotateFlip([System.Drawing.RotateFlipType]::Rotate90FlipNone) }' : ''}
-
-$doc.PrintPage += {
-    param($sender, $e)
-    $g = $e.Graphics
-    ${
-			splitMode === '2-strip'
-				? `
-    $halfW = [Math]::Floor($e.PageBounds.Width / 2)
-    DrawWithLayout $g $img ([System.Drawing.Rectangle]::new($e.PageBounds.X, $e.PageBounds.Y, $halfW, $e.PageBounds.Height), '${layoutMode}')
-    DrawWithLayout $g $img ([System.Drawing.Rectangle]::new($e.PageBounds.X + $halfW, $e.PageBounds.Y, $halfW, $e.PageBounds.Height), '${layoutMode}')
-    `
-				: `DrawWithLayout $g $img $e.PageBounds '${layoutMode}'`
+	} finally {
+		if (tempPath) {
+			await fs.unlink(tempPath).catch(() => undefined);
 		}
-}
-
-$doc.Print()
-$ms.Close()
-$img.Dispose()
-`.replace(/\$\$/g, '$'); // escape literal $ signs
+	}
 }

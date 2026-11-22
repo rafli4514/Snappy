@@ -11,7 +11,7 @@
 	} from '#lib/stores/session';
 	import { PRODUK, renderStripPreview, getProductForCount } from '#lib/utils/canvas';
 	import { frameToTemplate, listFrames } from '#lib/utils/frameStorage';
-	import { formatById } from '#lib/data/standardFormats';
+	import { detectFormat, formatById } from '#lib/data/standardFormats';
 	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
 	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
 	import type { PhotoFrame } from '#lib/types';
@@ -21,18 +21,36 @@
 	$: theme = $session.theme;
 	$: photos = $stripPhotos;
 	$: photoCount = $session.photoCount;
+	$: formatId = $session.formatId;
 	$: activeFrame = $session.activeFrame;
 	$: caption = $session.caption;
 	$: showDate = $session.showDate;
 
 	$: activeTemplate = activeFrame ? frameToTemplate(activeFrame) : $session.selectedTemplate;
 
-	// ── Panel kanan: template admin (frame tersimpan) ──
+	// ── Panel kanan: hanya template yang persis cocok format + jumlah foto ──
 	let savedFramesList: PhotoFrame[] = [];
-	$: savedFrames = savedFramesList.map((frame) => ({
-		frame,
-		matched: frame.slotCount === photoCount
-	}));
+
+	function frameMatchesSession(
+		frame: PhotoFrame,
+		targetFormatId: string,
+		targetPhotoCount: number
+	): boolean {
+		if (frame.enabled === false) return false;
+		if (frame.slotCount !== targetPhotoCount) return false;
+		const resolvedFormatId =
+			frame.formatId ?? detectFormat(frame.designWidth, frame.designHeight)?.id ?? null;
+		return resolvedFormatId === targetFormatId;
+	}
+
+	$: matchingFrames = savedFramesList.filter((frame) =>
+		frameMatchesSession(frame, formatId, photoCount)
+	);
+
+	// Jika activeFrame tidak cocok dengan format/jumlah foto sesi saat ini, kembalikan ke bawaan.
+	$: if (activeFrame && !frameMatchesSession(activeFrame, formatId, photoCount)) {
+		setActiveFrame(null);
+	}
 
 	// ── Preferensi workspace ──
 	let showSlotNumbers = true;
@@ -141,23 +159,11 @@
 	}
 
 	function formatOf(frame: PhotoFrame): string {
-		return frame.formatId ? shortFormatLabel(frame.formatId) : 'KUSTOM';
+		const id = frame.formatId ?? detectFormat(frame.designWidth, frame.designHeight)?.id;
+		return id ? shortFormatLabel(id) : 'KUSTOM';
 	}
 
-	// ── Filter format: chip hanya muncul untuk format yang tersedia ──
-	let formatFilter: string | null = null;
 	let isPanelCollapsed = false;
-
-	$: formatOptions = savedFrames.reduce<{ id: string; label: string }[]>((acc, item) => {
-		const id = item.frame.formatId;
-		if (!id || acc.some((option) => option.id === id)) return acc;
-		acc.push({ id, label: shortFormatLabel(id) });
-		return acc;
-	}, []);
-
-	$: visibleFrames = formatFilter
-		? savedFrames.filter((item) => item.frame.formatId === formatFilter)
-		: savedFrames;
 
 	function togglePanel(): void {
 		isPanelCollapsed = !isPanelCollapsed;
@@ -400,34 +406,10 @@
 			{#if !isPanelCollapsed}
 				<aside class="panel templates-panel" aria-label="Katalog template">
 					<div class="templates-head">
-						<div class="panel-head">
-							<span id="filter-title" class="panel-eyebrow">TEMPLATE</span>
+						<div class="panel-head is-inline">
+							<span class="panel-eyebrow">TEMPLATE</span>
+							<span class="templates-spec">{shortFormatLabel(formatId)} · {photoCount} Foto</span>
 						</div>
-
-						{#if formatOptions.length > 0}
-							<div class="filter-chips" role="group" aria-labelledby="filter-title">
-								<button
-									type="button"
-									class="filter-chip"
-									class:is-active={formatFilter === null}
-									on:click={() => (formatFilter = null)}
-									aria-pressed={formatFilter === null ? 'true' : 'false'}
-								>
-									Semua
-								</button>
-								{#each formatOptions as option (option.id)}
-									<button
-										type="button"
-										class="filter-chip"
-										class:is-active={formatFilter === option.id}
-										on:click={() => (formatFilter = option.id)}
-										aria-pressed={formatFilter === option.id ? 'true' : 'false'}
-									>
-										{option.label}
-									</button>
-								{/each}
-							</div>
-						{/if}
 					</div>
 
 					<div
@@ -436,93 +418,57 @@
 						role="region"
 						aria-label="Daftar template"
 					>
-						{#if savedFrames.length === 0}
-							<div class="empty-catalog">
-								<div class="empty-icon" aria-hidden="true">
-									<svg
-										viewBox="0 0 24 24"
-										width="24"
-										height="24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.8"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									>
-										<path
-											d="M4 8h2l1.5-2h9L18 8h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z"
-										/>
-										<circle cx="12" cy="13" r="3.5" />
-									</svg>
-								</div>
-								<p class="empty-title">Belum ada template kustom</p>
-								<p class="empty-body">Admin dapat menambahkan bingkai baru lewat Frame Studio.</p>
-								<a class="empty-link" href="/admin/frames">Buka Frame Studio</a>
-							</div>
-						{:else if visibleFrames.length === 0}
-							<p class="filter-empty">Tidak ada template untuk filter ini.</p>
-						{:else}
-							<div class="template-grid" role="group" aria-label="Daftar template strip">
-								{#if formatFilter === null}
-									<button
-										type="button"
-										class="template-card"
-										class:is-selected={$session.activeFrame === null &&
-											$session.selectedTemplate === 'classic'}
-										on:click={() => {
-											setActiveFrame(null);
-											selectBuiltinTemplate('classic');
-										}}
-										aria-pressed={$session.activeFrame === null &&
-										$session.selectedTemplate === 'classic'
-											? 'true'
-											: 'false'}
-										aria-label="Classic bawaan"
-									>
-										<span class="template-thumb is-builtin">
-											<span class="builtin-label">Classic</span>
-											{#if $session.activeFrame === null && $session.selectedTemplate === 'classic'}
-												<span class="selected-mark" aria-hidden="true">✓</span>
-											{/if}
-										</span>
-										<span class="template-name">Classic (Bawaan)</span>
-										<span class="template-sub">Kertas booth</span>
-									</button>
-								{/if}
+						<div class="template-grid" role="group" aria-label="Daftar template strip">
+							<button
+								type="button"
+								class="template-card"
+								class:is-selected={$session.activeFrame === null &&
+									$session.selectedTemplate === 'classic'}
+								on:click={() => {
+									setActiveFrame(null);
+									selectBuiltinTemplate('classic');
+								}}
+								aria-pressed={$session.activeFrame === null &&
+								$session.selectedTemplate === 'classic'
+									? 'true'
+									: 'false'}
+								aria-label="Classic bawaan"
+							>
+								<span class="template-thumb is-builtin">
+									<span class="builtin-label">Classic</span>
+									{#if $session.activeFrame === null && $session.selectedTemplate === 'classic'}
+										<span class="selected-mark" aria-hidden="true">✓</span>
+									{/if}
+								</span>
+								<span class="template-name">Classic (Bawaan)</span>
+								<span class="template-sub">Kertas booth</span>
+							</button>
 
-								{#each visibleFrames as item (item.frame.id)}
-									<button
-										type="button"
-										class="template-card"
-										class:is-selected={$session.activeFrame?.id === item.frame.id}
-										class:is-locked={!item.matched}
-										on:click={() => selectSavedFrame(item.frame)}
-										disabled={!item.matched}
-										aria-pressed={$session.activeFrame?.id === item.frame.id ? 'true' : 'false'}
-										aria-label="{item.frame.name}{item.matched
-											? ''
-											: `: butuh ${item.frame.slotCount} foto`}"
-									>
-										<span class="template-thumb">
-											<img
-												src={item.frame.artworkDataUrl}
-												alt=""
-												class="template-thumb-img"
-												draggable="false"
-											/>
-											{#if $session.activeFrame?.id === item.frame.id}
-												<span class="selected-mark" aria-hidden="true">✓</span>
-											{/if}
-										</span>
-										<span class="template-name">{item.frame.name}</span>
-										<span class="template-sub">{formatOf(item.frame)}</span>
-										{#if !item.matched}
-											<span class="template-note">Butuh {item.frame.slotCount} foto</span>
+							{#each matchingFrames as frame (frame.id)}
+								<button
+									type="button"
+									class="template-card"
+									class:is-selected={$session.activeFrame?.id === frame.id}
+									on:click={() => selectSavedFrame(frame)}
+									aria-pressed={$session.activeFrame?.id === frame.id ? 'true' : 'false'}
+									aria-label={frame.name}
+								>
+									<span class="template-thumb">
+										<img
+											src={frame.artworkDataUrl}
+											alt=""
+											class="template-thumb-img"
+											draggable="false"
+										/>
+										{#if $session.activeFrame?.id === frame.id}
+											<span class="selected-mark" aria-hidden="true">✓</span>
 										{/if}
-									</button>
-								{/each}
-							</div>
-						{/if}
+									</span>
+									<span class="template-name">{frame.name}</span>
+									<span class="template-sub">{formatOf(frame)} · {frame.slotCount} Foto</span>
+								</button>
+							{/each}
+						</div>
 					</div>
 
 					<footer class="templates-footer">

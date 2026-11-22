@@ -15,14 +15,12 @@
 		type SeriesDef
 	} from '#lib/features/dashboard/MultiSeriesChart.svelte';
 	import {
-		Globe,
 		RefreshCw,
 		ChevronRight,
 		ExternalLink,
 		X,
 		Printer,
 		Cloud,
-		Upload,
 		Frame,
 		Ruler,
 		Sticker,
@@ -98,9 +96,9 @@
 	];
 
 	const RANGE_OPTIONS: { id: RangePreset; short: string; label: string; days: number }[] = [
-		{ id: '7d', short: '7h', label: '7 Hari Terakhir', days: 7 },
-		{ id: '14d', short: '14h', label: '14 Hari Terakhir', days: 14 },
-		{ id: '30d', short: '1bln', label: '30 Hari Terakhir', days: 30 },
+		{ id: '7d', short: '7 Hari', label: '7 Hari Terakhir', days: 7 },
+		{ id: '14d', short: '14 Hari', label: '14 Hari Terakhir', days: 14 },
+		{ id: '30d', short: '30 Hari', label: '30 Hari Terakhir', days: 30 },
 		{ id: 'all', short: 'Semua', label: 'Seluruh Data', days: 30 }
 	];
 
@@ -132,13 +130,6 @@
 	const customStickersCount = $derived($customStickersStore.length);
 	const customFiltersCount = $derived($customFiltersStore.length);
 	const customArCount = $derived($customArStore.length);
-
-	const tzLabel = $derived.by(() => {
-		const offsetMin = -now.getTimezoneOffset();
-		const sign = offsetMin >= 0 ? '+' : '-';
-		const hrs = Math.floor(Math.abs(offsetMin) / 60);
-		return `GMT${sign}${hrs}`;
-	});
 
 	const currentRange = $derived(
 		RANGE_OPTIONS.find((r) => r.id === rangePreset) ?? RANGE_OPTIONS[2]
@@ -358,14 +349,12 @@
 	const cloudStat = $derived(
 		queueSummary['cloud-sync'] ?? { total: 0, pending: 0, failed: 0, done: 0 }
 	);
-	const uploadStat = $derived(queueSummary.upload ?? { total: 0, pending: 0, failed: 0, done: 0 });
 
 	const dSess = $derived(compareText(curTotalSessions, prevTotalSessions));
 	const dPhoto = $derived(compareText(curTotalPhotos, prevTotalPhotos));
 	const dAvg = $derived(compareText(curAvgPhotos, prevAvgPhotos));
 	const pBadge = $derived(queuePill(printStat));
 	const cBadge = $derived(queuePill(cloudStat));
-	const uBadge = $derived(queuePill(uploadStat));
 
 	const sparkSessions = $derived.by(() => {
 		const map = new Map(dailyBuckets.map((b) => [b.key, 0]));
@@ -682,40 +671,40 @@
 </script>
 
 <div class="or-page">
-	<!-- ═══ Header Aktivitas bergaya OpenRouter ═══ -->
+	<!-- ═══ Header Aktivitas ═══ -->
 	<header class="or-head">
-		<div>
+		<div class="or-head-copy">
 			<h1 class="or-title">Aktivitas</h1>
-			<p class="or-sub">
-				Pantau volume foto, ukuran frame terpopuler, riwayat sesi, cetak, dan sinkronisasi cloud
-			</p>
+			<p class="or-sub">Ringkasan volume foto, ukuran frame terpopuler, dan operasional studio.</p>
 		</div>
 
 		<div class="or-controls">
-			<span class="or-ctrl-chip" title="Zona waktu lokal">
-				<Globe size={13} />
-				<span class="d-num">{tzLabel}</span>
-			</span>
+			<div class="or-range-seg" role="group" aria-label="Pilih rentang waktu">
+				{#each RANGE_OPTIONS as opt (opt.id)}
+					<button
+						type="button"
+						class="or-range-btn"
+						class:is-active={rangePreset === opt.id}
+						aria-pressed={rangePreset === opt.id}
+						title={opt.label}
+						onclick={() => (rangePreset = opt.id)}
+					>
+						{opt.short}
+					</button>
+				{/each}
+			</div>
 
 			<button
 				type="button"
-				class="or-ctrl-icon"
+				class="or-refresh-btn"
 				onclick={loadAll}
 				disabled={loading}
-				aria-label="Muat ulang data"
+				aria-label="Muat ulang data aktivitas"
 				title="Muat ulang data"
 			>
 				<span class="or-spin" class:is-spinning={loading}><RefreshCw size={14} /></span>
+				<span>Muat Ulang</span>
 			</button>
-
-			<label class="or-range-wrap">
-				<span class="or-range-tag">{currentRange.short}</span>
-				<select class="or-range-select" bind:value={rangePreset} aria-label="Pilih rentang waktu">
-					{#each RANGE_OPTIONS as opt (opt.id)}
-						<option value={opt.id}>{opt.label}</option>
-					{/each}
-				</select>
-			</label>
 		</div>
 	</header>
 
@@ -1395,9 +1384,6 @@
 		<section class="or-trend-section">
 			<div class="or-sec-bar">
 				<h2 class="or-sec-title">Antrean &amp; Sinkronisasi</h2>
-				<a class="or-explore-btn" href="/dashboard/queue">
-					Buka Semua Antrean <ChevronRight size={13} />
-				</a>
 			</div>
 
 			<article class="d-card">
@@ -1452,25 +1438,6 @@
 									</a>
 								</td>
 							</tr>
-
-							<tr>
-								<td>
-									<span class="or-tbl-dim">
-										<Upload size={15} />
-										<span>Antrean Unggahan Aset</span>
-									</span>
-								</td>
-								<td class="is-right d-num">{uploadStat.total}</td>
-								<td class="is-right d-num">{uploadStat.done}</td>
-								<td class="is-right d-num">{uploadStat.pending}</td>
-								<td class="is-right d-num">{uploadStat.failed}</td>
-								<td><span class={uBadge.cls}>{uBadge.label}</span></td>
-								<td class="is-right">
-									<a class="or-explore-btn" href="/dashboard/queue/upload">
-										Kelola <ChevronRight size={13} />
-									</a>
-								</td>
-							</tr>
 						</tbody>
 					</table>
 				</div>
@@ -1480,9 +1447,6 @@
 		<section class="or-trend-section">
 			<div class="or-sec-bar">
 				<h2 class="or-sec-title">Katalog Aset Studio</h2>
-				<a class="or-explore-btn" href="/dashboard/assets">
-					Buka Katalog <ChevronRight size={13} />
-				</a>
 			</div>
 
 			<article class="d-card">
@@ -1578,14 +1542,19 @@
 	.or-head {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: flex-start;
+		align-items: flex-end;
 		justify-content: space-between;
-		gap: 14px;
+		gap: 14px 20px;
+	}
+
+	.or-head-copy {
+		min-width: 0;
+		flex: 1 1 280px;
 	}
 
 	.or-title {
 		margin: 0;
-		font-size: clamp(1.5rem, 2.3vw, 1.85rem);
+		font-size: clamp(1.45rem, 2.2vw, 1.8rem);
 		font-weight: 800;
 		letter-spacing: -0.025em;
 		line-height: 1.15;
@@ -1593,8 +1562,9 @@
 	}
 
 	.or-sub {
-		margin: 4px 0 0;
+		margin: 5px 0 0;
 		font-size: 0.84rem;
+		line-height: 1.45;
 		color: var(--d-muted);
 	}
 
@@ -1603,82 +1573,82 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
+		flex-shrink: 0;
 	}
 
-	.or-ctrl-chip {
+	.or-range-seg {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		height: 34px;
-		padding: 0 11px;
+		gap: 2px;
+		height: 36px;
+		padding: 3px;
 		border: 1px solid var(--d-border);
-		border-radius: 9px;
+		border-radius: 10px;
 		background: var(--d-surface);
-		color: var(--d-ink);
+	}
+
+	.or-range-btn {
+		height: 100%;
+		padding: 0 11px;
+		border: none;
+		border-radius: 7px;
+		background: transparent;
+		color: var(--d-muted);
+		font-family: var(--font-body);
 		font-size: 0.76rem;
 		font-weight: 700;
-	}
-
-	.or-ctrl-icon {
-		width: 34px;
-		height: 34px;
-		border: 1px solid var(--d-border);
-		border-radius: 9px;
-		background: var(--d-surface);
-		color: var(--d-muted);
-		display: grid;
-		place-items: center;
+		white-space: nowrap;
 		cursor: pointer;
 		transition:
-			color 140ms ease,
-			border-color 140ms ease;
+			background-color 140ms ease,
+			color 140ms ease;
 	}
 
-	.or-ctrl-icon:hover:not(:disabled) {
+	.or-range-btn:hover:not(.is-active) {
 		color: var(--d-ink);
+		background: var(--d-surface-2);
+	}
+
+	.or-range-btn.is-active {
+		background: var(--d-ink);
+		color: var(--d-bg);
+	}
+
+	.or-range-btn:focus-visible,
+	.or-refresh-btn:focus-visible {
+		outline: 2px solid var(--d-ink);
+		outline-offset: 2px;
+	}
+
+	.or-refresh-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		height: 36px;
+		padding: 0 13px;
+		border: 1px solid var(--d-border);
+		border-radius: 10px;
+		background: var(--d-surface);
+		color: var(--d-ink);
+		font-family: var(--font-body);
+		font-size: 0.76rem;
+		font-weight: 700;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			background-color 140ms ease,
+			border-color 140ms ease,
+			opacity 140ms ease;
+	}
+
+	.or-refresh-btn:hover:not(:disabled) {
+		background: var(--d-surface-2);
 		border-color: var(--d-border-strong);
 	}
 
-	.or-ctrl-icon:disabled {
+	.or-refresh-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.or-range-wrap {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		height: 34px;
-		padding: 0 10px 0 8px;
-		border: 1px solid var(--d-border);
-		border-radius: 9px;
-		background: var(--d-surface);
-		cursor: pointer;
-	}
-
-	.or-range-tag {
-		padding: 2px 6px;
-		border-radius: 5px;
-		background: var(--d-surface-2);
-		color: var(--d-muted);
-		font-size: 0.68rem;
-		font-weight: 800;
-	}
-
-	.or-range-select {
-		border: none;
-		background: transparent;
-		color: var(--d-ink);
-		font-family: var(--font-body);
-		font-size: 0.78rem;
-		font-weight: 700;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.or-range-select option {
-		background: var(--d-surface);
-		color: var(--d-ink);
 	}
 
 	.or-spin {
@@ -2317,6 +2287,20 @@
 	}
 
 	@media (max-width: 600px) {
+		.or-controls {
+			width: 100%;
+			justify-content: space-between;
+		}
+
+		.or-range-seg {
+			flex: 1 1 auto;
+		}
+
+		.or-range-btn {
+			flex: 1;
+			padding: 0 8px;
+		}
+
 		.or-kpi-grid {
 			grid-template-columns: minmax(0, 1fr);
 		}

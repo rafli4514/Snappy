@@ -28,16 +28,27 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (buf.length > 4 * 1024 * 1024) {
 			return json({ ok: false, error: 'Ukuran sticker maksimal 4 MB.' }, { status: 413 });
 		}
+		const w = Math.round(Number(form.get('width')) || 0);
+		const h = Math.round(Number(form.get('height')) || 0);
+		if (w > 0 && h > 0 && (Math.min(w, h) < 64 || Math.max(w, h) < 100)) {
+			return json(
+				{
+					ok: false,
+					error: `Resolusi stiker terlalu kecil (${w} × ${h} px). Minimal 100 px (sisi terpendek ≥ 64 px).`
+				},
+				{ status: 400 }
+			);
+		}
 		const stored = saveStickerFile(file.name, buf);
 		const name = String(form.get('name') || file.name.replace(/\.[^.]+$/, '')).slice(0, 80);
 		const category = String(form.get('category') || 'Custom').slice(0, 40) || 'Custom';
-		const w = Math.max(1, Math.min(8000, Math.round(Number(form.get('width')) || 200)));
-		const h = Math.max(1, Math.min(8000, Math.round(Number(form.get('height')) || 200)));
+		const safeW = Math.max(64, Math.min(8000, w || 200));
+		const safeH = Math.max(64, Math.min(8000, h || 200));
 		const item = upsertCustomSticker({
 			name,
 			file: stored,
 			category,
-			size: { w, h },
+			size: { w: safeW, h: safeH },
 			active: true,
 			enabled: true
 		});

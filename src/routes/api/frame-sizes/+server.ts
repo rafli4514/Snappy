@@ -37,7 +37,24 @@ function sanitize(input: Partial<CustomFrameSize> | null): Partial<CustomFrameSi
 	const cm = String(input.cm ?? `${(pxW / 118.11).toFixed(2)} × ${(pxH / 118.11).toFixed(2)} cm`)
 		.trim()
 		.slice(0, 80);
-	return { id, label, kind, pxW, pxH, cm, ratio: pxW / pxH, photos, defaultCount };
+	const rawThumb = typeof input.thumbnail === 'string' ? input.thumbnail.trim() : '';
+	const thumbnail =
+		/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(rawThumb) &&
+		rawThumb.length <= 700_000
+			? rawThumb
+			: undefined;
+	return {
+		id,
+		label,
+		kind,
+		pxW,
+		pxH,
+		cm,
+		ratio: pxW / pxH,
+		photos,
+		defaultCount,
+		...(thumbnail ? { thumbnail } : {})
+	};
 }
 
 export const GET: RequestHandler = () => {

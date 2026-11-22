@@ -101,3 +101,22 @@ export function getServerSession(id: string): GallerySession | null {
 
 	return null;
 }
+
+const SAFE_SESSION_ID = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** Hapus sesi dari cache memori dan disk lokal. */
+export function deleteServerSession(id: string): boolean {
+	if (!id || !SAFE_SESSION_ID.test(id)) return false;
+
+	let removed = inMemorySessions.delete(id);
+	try {
+		const filePath = path.join(CACHE_DIR, `${id}.json`);
+		if (fs.existsSync(filePath)) {
+			fs.unlinkSync(filePath);
+			removed = true;
+		}
+	} catch (err: unknown) {
+		console.error('Failed to delete session from disk cache:', err);
+	}
+	return removed;
+}

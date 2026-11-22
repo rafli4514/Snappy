@@ -15,6 +15,20 @@ export interface DetectedBox {
 	height: number;
 }
 
+export interface WandSlot extends DetectedBox {
+	/** Pusat visual (0..1) untuk meletakkan nomor slot tepat di tengah area terlihat. */
+	cx: number;
+	cy: number;
+	/** Titik awal flood-fill (0..1) bila dipilih menggunakan Magic Wand. */
+	seedX?: number;
+	seedY?: number;
+	tolerance?: number;
+	/** True bila area sudah transparan sejak awal sehingga tidak perlu dilubangi ulang. */
+	alreadyTransparent?: boolean;
+	/** PNG transparan berisi sorotan & garis kontur persis mengikuti bentuk lubang/stiker. */
+	maskDataUrl?: string;
+}
+
 export interface DetectOptions {
 	mode?: 'transparent' | 'key';
 	/** Hex color, dipakai saat mode = 'key'. */
@@ -185,6 +199,354 @@ export async function eraseRegions(dataUrl: string, boxes: DetectedBox[]): Promi
 		const h = Math.min(canvas.height - y, Math.ceil(box.height * canvas.height) + 2);
 		ctx.clearRect(x, y, w, h);
 	}
+	return canvas.toDataURL('image/png');
+}
+
+export interface TrimResult {
+	dataUrl: string;
+	width: number;
+	height: number;
+	trimmed: boolean;
+}
+
+/**
+ * Potong margin transparan berlebih di sekeliling artwork (misalnya strip 2×6
+ * yang diekspor pada kanvas 1:1) agar rasio dan dimensi akurat.
+ */
+export async function trimTransparentBounds(dataUrl: string): Promise<TrimResult> {
+	const img = await loadImageElement(dataUrl);
+	const origW = img.naturalWidth;
+	const origH = img.naturalHeight;
+	if (!origW || !origH) return { dataUrl, width: origW, height: origH, trimmed: false };
+
+	const canvas = document.createElement('canvas');
+	canvas.width = origW;
+	canvas.height = origH;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return { dataUrl, width: origW, height: origH, trimmed: false };
+
+	ctx.drawImage(img, 0, 0);
+	const { data } = ctx.getImageData(0, 0, origW, origH);
+
+	let minX = origW;
+	let minY = origH;
+	let maxX = -1;
+	let maxY = -1;
+
+	for (let y = 0; y < origH; y++) {
+		const row = y * origW * 4;
+		for (let x = 0; x < origW; x++) {
+			if (data[row + x * 4 + 3] > 12) {
+				if (x < minX) minX = x;
+				if (x > maxX) maxX = x;
+				if (y < minY) minY = y;
+				if (y > maxY) maxY = y;
+			}
+		}
+	}
+
+	if (maxX <= minX || maxY <= minY) {
+		return { dataUrl, width: origW, height: origH, trimmed: false };
+	}
+
+	const trimW = maxX - minX + 1;
+	const trimH = maxY - minY + 1;
+
+	// Hanya potong bila memang ada margin transparan signifikan (> 3% di salah satu sumbu).
+	if (trimW >= origW * 0.97 && trimH >= origH * 0.97) {
+		return { dataUrl, width: origW, height: origH, trimmed: false };
+	}
+
+	const out = document.createElement('canvas');
+	out.width = trimW;
+	out.height = trimH;
+	const outCtx = out.getContext('2d');
+	if (!outCtx) return { dataUrl, width: origW, height: origH, trimmed: false };
+
+	outCtx.drawImage(canvas, minX, minY, trimW, trimH, 0, 0, trimW, trimH);
+	return {
+		dataUrl: out.toDataURL('image/png'),
+		width: trimW,
+		height: trimH,
+		trimmed: true
+	};
+}
+
+/**
+ * Bangun gambar overlay sorotan biru + kontur 1px yang mengikuti bentuk persis
+ * (sudut membulat, kelopak bunga, pita, atau stiker yang menutupi sebagian slot).
+ */
+function buildMaskOverlayDataUrl(visited: Uint8Array, w: number, h: number): string {
+	const canvas = document.createElement('canvas');
+	canvas.width = w;
+	canvas.height = h;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return '';
+
+	const imgData = ctx.createImageData(w, h);
+	const out = imgData.data;
+
+	for (let py = 0; py < h; py++) {
+		const row = py * w;
+		for (let px = 0; px < w; px++) {
+			const idx = row + px;
+			if (!visited[idx]) continue;
+
+			const isEdge =
+				px === 0 ||
+				px === w - 1 ||
+				py === 0 ||
+				py === h - 1 ||
+				!visited[idx - 1] ||
+				!visited[idx + 1] ||
+				!visited[idx - w] ||
+				!visited[idx + w];
+
+			const o = idx * 4;
+			out[o] = 37; // #2563eb
+			out[o + 1] = 99;
+			out[o + 2] = 235;
+			out[o + 3] = isEdge ? 245 : 78;
+		}
+	}
+
+	ctx.putImageData(imgData, 0, 0);
+	return canvas.toDataURL('image/png');
+}
+
+/**
+ * Magic Wand (flood-fill cepat berbasis TypedArray) dari titik klik ternormalisasi (0..1).
+ * Mengikuti sudut membulat (rounded) maupun stiker/ornamen yang menimpa tepi kotak foto.
+ */
+export async function magicWandSelect(
+	dataUrl: string,
+	normX: number,
+	normY: number,
+	tolerance = 32
+): Promise<WandSlot | null> {
+	const img = await loadImageElement(dataUrl);
+	const scale = Math.min(1, MAX_DETECT_SIZE / Math.max(img.naturalWidth, img.naturalHeight));
+	const w = Math.max(1, Math.round(img.naturalWidth * scale));
+	const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+	const canvas = document.createElement('canvas');
+	canvas.width = w;
+	canvas.height = h;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return null;
+
+	ctx.drawImage(img, 0, 0, w, h);
+	const data = ctx.getImageData(0, 0, w, h).data;
+
+	const sx = Math.max(0, Math.min(w - 1, Math.round(normX * (w - 1))));
+	const sy = Math.max(0, Math.min(h - 1, Math.round(normY * (h - 1))));
+	const startIdx = sy * w + sx;
+	const so = startIdx * 4;
+	const sr = data[so];
+	const sg = data[so + 1];
+	const sb = data[so + 2];
+	const sa = data[so + 3];
+	const isTransparentSeed = sa < ALPHA_THRESHOLD;
+	const tolSq = tolerance * tolerance;
+
+	const total = w * h;
+	const visited = new Uint8Array(total);
+	const stack = new Int32Array(total);
+	let top = 0;
+	stack[top++] = startIdx;
+	visited[startIdx] = 1;
+
+	let minX = sx;
+	let maxX = sx;
+	let minY = sy;
+	let maxY = sy;
+	let sumX = 0;
+	let sumY = 0;
+	let area = 0;
+
+	const matches = (idx: number): boolean => {
+		const o = idx * 4;
+		const a = data[o + 3];
+		if (isTransparentSeed) return a < ALPHA_THRESHOLD;
+		if (a < ALPHA_THRESHOLD) return false;
+		const dr = data[o] - sr;
+		const dg = data[o + 1] - sg;
+		const db = data[o + 2] - sb;
+		return dr * dr + dg * dg + db * db <= tolSq;
+	};
+
+	while (top > 0) {
+		const idx = stack[--top];
+		const px = idx % w;
+		const py = (idx - px) / w;
+		area++;
+		sumX += px;
+		sumY += py;
+		if (px < minX) minX = px;
+		if (px > maxX) maxX = px;
+		if (py < minY) minY = py;
+		if (py > maxY) maxY = py;
+
+		if (px > 0 && !visited[idx - 1] && matches(idx - 1)) {
+			visited[idx - 1] = 1;
+			stack[top++] = idx - 1;
+		}
+		if (px < w - 1 && !visited[idx + 1] && matches(idx + 1)) {
+			visited[idx + 1] = 1;
+			stack[top++] = idx + 1;
+		}
+		if (py > 0 && !visited[idx - w] && matches(idx - w)) {
+			visited[idx - w] = 1;
+			stack[top++] = idx - w;
+		}
+		if (py < h - 1 && !visited[idx + w] && matches(idx + w)) {
+			visited[idx + w] = 1;
+			stack[top++] = idx + w;
+		}
+	}
+
+	if (area < Math.max(20, total * 0.002) || area > total * 0.85) {
+		return null;
+	}
+
+	return {
+		x: minX / w,
+		y: minY / h,
+		width: (maxX - minX + 1) / w,
+		height: (maxY - minY + 1) / h,
+		cx: sumX / area / w,
+		cy: sumY / area / h,
+		seedX: normX,
+		seedY: normY,
+		tolerance,
+		alreadyTransparent: isTransparentSeed,
+		maskDataUrl: buildMaskOverlayDataUrl(visited, w, h)
+	};
+}
+
+/**
+ * Hapus piksel persis mengikuti bentuk Magic Wand (pixel-exact flood-fill pada resolusi penuh),
+ * termasuk pelembutan tepi anti-alias 1px. Sudut membulat (rounded) maupun stiker/ornamen
+ * yang menimpa kotak foto tetap utuh di atas foto tamu.
+ */
+export async function eraseWandRegions(dataUrl: string, slots: WandSlot[]): Promise<string> {
+	const needErase = slots.filter((s) => !s.alreadyTransparent);
+	if (needErase.length === 0) return dataUrl;
+
+	const img = await loadImageElement(dataUrl);
+	const w = img.naturalWidth;
+	const h = img.naturalHeight;
+	const canvas = document.createElement('canvas');
+	canvas.width = w;
+	canvas.height = h;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new Error('Kanvas tidak tersedia');
+
+	ctx.drawImage(img, 0, 0);
+	const imgData = ctx.getImageData(0, 0, w, h);
+	const data = imgData.data;
+	const total = w * h;
+	const stack = new Int32Array(total);
+
+	for (const slot of needErase) {
+		if (slot.seedX === undefined || slot.seedY === undefined) {
+			// Fallback persegi hanya bila slot tidak memiliki titik seed
+			const rx = Math.max(0, Math.floor(slot.x * w));
+			const ry = Math.max(0, Math.floor(slot.y * h));
+			const rw = Math.min(w - rx, Math.ceil(slot.width * w));
+			const rh = Math.min(h - ry, Math.ceil(slot.height * h));
+			for (let py = ry; py < ry + rh; py++) {
+				for (let px = rx; px < rx + rw; px++) {
+					data[(py * w + px) * 4 + 3] = 0;
+				}
+			}
+			continue;
+		}
+
+		const tol = slot.tolerance ?? 32;
+		const tolSq = tol * tol;
+		const softTol = tol * 1.65;
+		const softTolSq = softTol * softTol;
+
+		const sx = Math.max(0, Math.min(w - 1, Math.round(slot.seedX * (w - 1))));
+		const sy = Math.max(0, Math.min(h - 1, Math.round(slot.seedY * (h - 1))));
+		const startIdx = sy * w + sx;
+		const so = startIdx * 4;
+		if (data[so + 3] < ALPHA_THRESHOLD) continue;
+
+		const sr = data[so];
+		const sg = data[so + 1];
+		const sb = data[so + 2];
+
+		const visited = new Uint8Array(total);
+		let top = 0;
+		stack[top++] = startIdx;
+		visited[startIdx] = 1;
+
+		const matches = (idx: number): boolean => {
+			const o = idx * 4;
+			if (data[o + 3] < ALPHA_THRESHOLD) return false;
+			const dr = data[o] - sr;
+			const dg = data[o + 1] - sg;
+			const db = data[o + 2] - sb;
+			return dr * dr + dg * dg + db * db <= tolSq;
+		};
+
+		while (top > 0) {
+			const idx = stack[--top];
+			const px = idx % w;
+			const py = (idx - px) / w;
+
+			if (px > 0 && !visited[idx - 1] && matches(idx - 1)) {
+				visited[idx - 1] = 1;
+				stack[top++] = idx - 1;
+			}
+			if (px < w - 1 && !visited[idx + 1] && matches(idx + 1)) {
+				visited[idx + 1] = 1;
+				stack[top++] = idx + 1;
+			}
+			if (py > 0 && !visited[idx - w] && matches(idx - w)) {
+				visited[idx - w] = 1;
+				stack[top++] = idx - w;
+			}
+			if (py < h - 1 && !visited[idx + w] && matches(idx + w)) {
+				visited[idx + w] = 1;
+				stack[top++] = idx + w;
+			}
+		}
+
+		// Hapus piksel interior menjadi transparan penuh + haluskan tepi anti-alias 1px
+		for (let i = 0; i < total; i++) {
+			if (visited[i]) {
+				data[i * 4 + 3] = 0;
+			}
+		}
+
+		for (let py = 1; py < h - 1; py++) {
+			const row = py * w;
+			for (let px = 1; px < w - 1; px++) {
+				const idx = row + px;
+				if (visited[idx]) continue;
+				if (!visited[idx - 1] && !visited[idx + 1] && !visited[idx - w] && !visited[idx + w]) {
+					continue;
+				}
+				const o = idx * 4;
+				const a = data[o + 3];
+				if (a === 0) continue;
+				const dr = data[o] - sr;
+				const dg = data[o + 1] - sg;
+				const db = data[o + 2] - sb;
+				const dSq = dr * dr + dg * dg + db * db;
+				if (dSq <= softTolSq) {
+					const dist = Math.sqrt(dSq);
+					const ratio = Math.max(0, Math.min(1, (dist - tol) / Math.max(1, softTol - tol)));
+					data[o + 3] = Math.round(a * ratio);
+				}
+			}
+		}
+	}
+
+	ctx.putImageData(imgData, 0, 0);
 	return canvas.toDataURL('image/png');
 }
 

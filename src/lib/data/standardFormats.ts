@@ -1,13 +1,12 @@
 /**
- * Katalog Standard Photobooth — 11 format cetak/digital 300 DPI.
+ * Katalog Standard Photobooth — 6 format cetak 300 DPI aktif (sesuai pilihan di /strip).
  *
  * Satu sumber kebenaran untuk:
- *  - /admin/standar   (katalog & kelola frame)
- *  - /strip           (tamu pilih format + jumlah foto)
- *  - print            (@page ukuran cetak mengikuti format)
+ *  - /dashboard/assets/frame-sizes (katalog & kelola ukuran frame)
+ *  - /strip                        (tamu pilih format + jumlah foto)
+ *  - print                         (@page ukuran cetak mengikuti format)
  *
  * Ukuran px = cm ÷ 2,54 × 300 (300 DPI), dibulatkan genap.
- * Story/Screen = digital only (tanpa cetak).
  */
 
 import type { ProductSpec, Products } from '#lib/types';
@@ -27,6 +26,8 @@ export interface StandardFormat {
 	/** Jumlah foto yang boleh dipilih tamu. */
 	photos: number[];
 	defaultCount: number;
+	/** Thumbnail contoh kustom (data URL PNG/WebP/JPEG) yang diunggah admin. */
+	thumbnail?: string;
 }
 
 export const BUILTIN_FORMATS: StandardFormat[] = [
@@ -49,8 +50,8 @@ export const BUILTIN_FORMATS: StandardFormat[] = [
 		pxH: 2400,
 		cm: '5,08 × 20,32 cm',
 		ratio: 600 / 2400,
-		photos: [4, 5, 6],
-		defaultCount: 6
+		photos: [4, 5],
+		defaultCount: 4
 	},
 	{
 		id: '4r-double',
@@ -64,17 +65,6 @@ export const BUILTIN_FORMATS: StandardFormat[] = [
 		defaultCount: 4
 	},
 	{
-		id: '4r-landscape',
-		label: '4R · Landscape',
-		kind: 'print',
-		pxW: 1800,
-		pxH: 1200,
-		cm: '15,24 × 10,16 cm',
-		ratio: 1800 / 1200,
-		photos: [1, 2],
-		defaultCount: 1
-	},
-	{
 		id: '3r',
 		label: '3R · Portrait',
 		kind: 'print',
@@ -82,7 +72,7 @@ export const BUILTIN_FORMATS: StandardFormat[] = [
 		pxH: 1500,
 		cm: '8,89 × 12,7 cm',
 		ratio: 1050 / 1500,
-		photos: [1, 2, 3],
+		photos: [3],
 		defaultCount: 3
 	},
 	{
@@ -93,8 +83,8 @@ export const BUILTIN_FORMATS: StandardFormat[] = [
 		pxH: 2100,
 		cm: '12,7 × 17,78 cm',
 		ratio: 1500 / 2100,
-		photos: [2, 3, 4],
-		defaultCount: 3
+		photos: [4],
+		defaultCount: 4
 	},
 	{
 		id: 'square',
@@ -104,52 +94,8 @@ export const BUILTIN_FORMATS: StandardFormat[] = [
 		pxH: 1200,
 		cm: '10,16 × 10,16 cm',
 		ratio: 1,
-		photos: [1, 2, 3, 4],
+		photos: [4],
 		defaultCount: 4
-	},
-	{
-		id: 'instax-mini',
-		label: 'Instax Mini',
-		kind: 'print',
-		pxW: 638,
-		pxH: 1016,
-		cm: '5,4 × 8,6 cm',
-		ratio: 638 / 1016,
-		photos: [1, 2],
-		defaultCount: 1
-	},
-	{
-		id: 'polaroid',
-		label: 'Polaroid Classic',
-		kind: 'print',
-		pxW: 1039,
-		pxH: 1276,
-		cm: '8,8 × 10,8 cm',
-		ratio: 1039 / 1276,
-		photos: [1, 2],
-		defaultCount: 1
-	},
-	{
-		id: 'story',
-		label: 'Story · 9:16',
-		kind: 'digital',
-		pxW: 1080,
-		pxH: 1920,
-		cm: '9:16 · digital',
-		ratio: 1080 / 1920,
-		photos: [1, 2, 3, 4],
-		defaultCount: 3
-	},
-	{
-		id: 'screen',
-		label: 'Screen · 16:9',
-		kind: 'digital',
-		pxW: 1920,
-		pxH: 1080,
-		cm: '16:9 · digital',
-		ratio: 1920 / 1080,
-		photos: [1, 2, 3, 4],
-		defaultCount: 2
 	}
 ];
 
@@ -365,34 +311,6 @@ export const STANDARD_SPECS: Record<string, Products> = {
 			]
 		}
 	},
-	'4r-landscape': {
-		1: {
-			nama: '4R',
-			cm: '15,24 × 10,16 cm',
-			pxW: 1800,
-			pxH: 1200,
-			margin: 32,
-			hairline: 14,
-			gap: 16,
-			footer: 130,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 1006, cells: [{ w: 1736 }] }]
-		},
-		2: {
-			nama: '4R',
-			cm: '15,24 × 10,16 cm',
-			pxW: 1800,
-			pxH: 1200,
-			margin: 32,
-			hairline: 14,
-			gap: 16,
-			footer: 130,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 1006, cells: [{ w: 860 }, { w: 860 }] }]
-		}
-	},
 	'3r': {
 		1: {
 			nama: '3R',
@@ -550,188 +468,6 @@ export const STANDARD_SPECS: Record<string, Products> = {
 				{ h: 510, cells: [{ w: 565 }, { w: 565 }] },
 				{ h: 510, cells: [{ w: 565 }, { w: 565 }] }
 			]
-		}
-	},
-	'instax-mini': {
-		1: {
-			nama: 'Instax Mini',
-			cm: '5,4 × 8,6 cm',
-			pxW: 638,
-			pxH: 1016,
-			margin: 30,
-			hairline: 8,
-			gap: 12,
-			footer: 96,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [{ h: 860, cells: [{ w: 578 }] }]
-		},
-		2: {
-			nama: 'Instax Mini',
-			cm: '5,4 × 8,6 cm',
-			pxW: 638,
-			pxH: 1016,
-			margin: 30,
-			hairline: 8,
-			gap: 12,
-			footer: 96,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [
-				{ h: 424, cells: [{ w: 578 }] },
-				{ h: 424, cells: [{ w: 578 }] }
-			]
-		}
-	},
-	polaroid: {
-		1: {
-			nama: 'Polaroid',
-			cm: '8,8 × 10,8 cm',
-			pxW: 1039,
-			pxH: 1276,
-			margin: 36,
-			hairline: 10,
-			gap: 16,
-			footer: 170,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [{ h: 1034, cells: [{ w: 967 }] }]
-		},
-		2: {
-			nama: 'Polaroid',
-			cm: '8,8 × 10,8 cm',
-			pxW: 1039,
-			pxH: 1276,
-			margin: 36,
-			hairline: 10,
-			gap: 16,
-			footer: 170,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [
-				{ h: 509, cells: [{ w: 967 }] },
-				{ h: 509, cells: [{ w: 967 }] }
-			]
-		}
-	},
-	story: {
-		1: {
-			nama: 'Story',
-			cm: '9:16 · digital',
-			pxW: 1080,
-			pxH: 1920,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 150,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [{ h: 1702, cells: [{ w: 1012 }] }]
-		},
-		2: {
-			nama: 'Story',
-			cm: '9:16 · digital',
-			pxW: 1080,
-			pxH: 1920,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 150,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [
-				{ h: 844, cells: [{ w: 1012 }] },
-				{ h: 844, cells: [{ w: 1012 }] }
-			]
-		},
-		3: {
-			nama: 'Story',
-			cm: '9:16 · digital',
-			pxW: 1080,
-			pxH: 1920,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 150,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [
-				{ h: 558, cells: [{ w: 1012 }] },
-				{ h: 558, cells: [{ w: 1012 }] },
-				{ h: 558, cells: [{ w: 1012 }] }
-			]
-		},
-		4: {
-			nama: 'Story',
-			cm: '9:16 · digital',
-			pxW: 1080,
-			pxH: 1920,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 150,
-			copySheet: 1,
-			sheetOrient: 'portrait',
-			rows: [
-				{ h: 415, cells: [{ w: 1012 }] },
-				{ h: 415, cells: [{ w: 1012 }] },
-				{ h: 415, cells: [{ w: 1012 }] },
-				{ h: 415, cells: [{ w: 1012 }] }
-			]
-		}
-	},
-	screen: {
-		1: {
-			nama: 'Screen',
-			cm: '16:9 · digital',
-			pxW: 1920,
-			pxH: 1080,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 120,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 892, cells: [{ w: 1852 }] }]
-		},
-		2: {
-			nama: 'Screen',
-			cm: '16:9 · digital',
-			pxW: 1920,
-			pxH: 1080,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 120,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 892, cells: [{ w: 919 }, { w: 919 }] }]
-		},
-		3: {
-			nama: 'Screen',
-			cm: '16:9 · digital',
-			pxW: 1920,
-			pxH: 1080,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 120,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 892, cells: [{ w: 608 }, { w: 608 }, { w: 608 }] }]
-		},
-		4: {
-			nama: 'Screen',
-			cm: '16:9 · digital',
-			pxW: 1920,
-			pxH: 1080,
-			margin: 34,
-			hairline: 12,
-			gap: 14,
-			footer: 120,
-			copySheet: 1,
-			sheetOrient: 'landscape',
-			rows: [{ h: 892, cells: [{ w: 452 }, { w: 452 }, { w: 452 }, { w: 452 }] }]
 		}
 	}
 };

@@ -7,17 +7,13 @@
 	import {
 		LayoutDashboard,
 		Camera,
-		Images,
-		Shapes,
 		Frame,
 		Ruler,
 		Sticker,
 		SlidersHorizontal,
 		Sparkles,
-		ListOrdered,
 		Printer,
 		Cloud,
-		Upload,
 		Settings,
 		PanelLeftClose,
 		PanelLeftOpen,
@@ -33,40 +29,30 @@
 	let collapsed = $state(false);
 	let mobileOpen = $state(false);
 
-	type SubItem = { href: string; label: string; icon: LucideIcon };
-	type NavItem = {
+	type NavLink = {
 		href: string;
 		label: string;
 		icon: LucideIcon;
-		active: (p: string) => boolean;
-		children?: SubItem[];
+		exact?: boolean;
+	};
+	type NavGroup = {
+		id: string;
+		label?: string;
+		items: NavLink[];
 	};
 
-	const NAV: NavItem[] = [
+	const NAV_GROUPS: NavGroup[] = [
 		{
-			href: '/dashboard',
-			label: 'Ringkasan',
-			icon: LayoutDashboard,
-			active: (p: string) => p === '/dashboard'
+			id: 'main',
+			items: [
+				{ href: '/dashboard', label: 'Ringkasan', icon: LayoutDashboard, exact: true },
+				{ href: '/dashboard/sessions', label: 'Sesi', icon: Camera }
+			]
 		},
 		{
-			href: '/dashboard/sessions',
-			label: 'Sesi',
-			icon: Camera,
-			active: (p: string) => p.startsWith('/dashboard/sessions')
-		},
-		{
-			href: '/dashboard/gallery',
-			label: 'Galeri',
-			icon: Images,
-			active: (p: string) => p.startsWith('/dashboard/gallery')
-		},
-		{
-			href: '/dashboard/assets',
+			id: 'assets',
 			label: 'Aset',
-			icon: Shapes,
-			active: (p: string) => p.startsWith('/dashboard/assets'),
-			children: [
+			items: [
 				{ href: '/dashboard/assets/frames', label: 'Frame Studio', icon: Frame },
 				{ href: '/dashboard/assets/frame-sizes', label: 'Ukuran Frame', icon: Ruler },
 				{ href: '/dashboard/assets/stickers', label: 'Stiker', icon: Sticker },
@@ -75,40 +61,38 @@
 			]
 		},
 		{
-			href: '/dashboard/queue',
+			id: 'queue',
 			label: 'Antrean',
-			icon: ListOrdered,
-			active: (p: string) => p.startsWith('/dashboard/queue'),
-			children: [
+			items: [
 				{ href: '/dashboard/queue/print', label: 'Cetak', icon: Printer },
-				{ href: '/dashboard/queue/cloud-sync', label: 'Sinkron Cloud', icon: Cloud },
-				{ href: '/dashboard/queue/upload', label: 'Unggah', icon: Upload }
+				{ href: '/dashboard/queue/cloud-sync', label: 'Sinkron Cloud', icon: Cloud }
 			]
 		},
 		{
-			href: '/dashboard/settings',
-			label: 'Pengaturan',
-			icon: Settings,
-			active: (p: string) => p.startsWith('/dashboard/settings')
+			id: 'system',
+			label: 'Sistem',
+			items: [{ href: '/dashboard/settings', label: 'Pengaturan', icon: Settings }]
 		}
 	];
 
 	const currentPath = $derived(page.url.pathname);
 	const isLight = $derived($session.theme === 'light');
 
+	function isLinkActive(item: NavLink, p: string): boolean {
+		if (item.exact) return p === item.href;
+		return p === item.href || p.startsWith(item.href + '/');
+	}
+
 	const breadcrumbs = $derived.by(() => {
-		const crumbs: { label: string; href: string }[] = [{ label: 'Dashboard', href: '/dashboard' }];
+		const crumbs: { label: string; href?: string }[] = [{ label: 'Dashboard', href: '/dashboard' }];
 		if (currentPath === '/dashboard') return crumbs;
-		for (const item of NAV) {
-			if (item.href === '/dashboard') continue;
-			if (item.active(currentPath)) {
-				crumbs.push({ label: item.label, href: item.href });
-				if (item.children) {
-					const child = item.children.find(
-						(c) => currentPath === c.href || currentPath.startsWith(c.href + '/')
-					);
-					if (child) crumbs.push({ label: child.label, href: child.href });
+		for (const group of NAV_GROUPS) {
+			const hit = group.items.find((item) => isLinkActive(item, currentPath));
+			if (hit) {
+				if (group.label && group.id !== 'system') {
+					crumbs.push({ label: group.label });
 				}
+				crumbs.push({ label: hit.label, href: hit.href });
 				break;
 			}
 		}
@@ -143,9 +127,6 @@
 					height="81"
 					draggable="false"
 				/>
-				{#if !collapsed}
-					<span class="side-badge">ADMIN</span>
-				{/if}
 			</a>
 
 			<button
@@ -173,43 +154,33 @@
 		</div>
 
 		<nav class="side-nav" aria-label="Navigasi dashboard">
-			{#each NAV as item (item.href)}
-				{@const isGroupActive = item.active(currentPath)}
-				{@const Icon = item.icon}
-				<div class="nav-section">
-					<a
-						class="nav-item"
-						class:is-active={isGroupActive}
-						href={item.href}
-						onclick={closeMobile}
-						title={collapsed ? item.label : undefined}
-						aria-current={currentPath === item.href ? 'page' : undefined}
-					>
-						<span class="nav-icon"><Icon size={17} /></span>
-						{#if !collapsed}
-							<span class="nav-label">{item.label}</span>
+			{#each NAV_GROUPS as group, gi (group.id)}
+				<div class="nav-group" class:has-top-gap={gi > 0}>
+					{#if group.label}
+						{#if collapsed}
+							<div class="nav-sep" aria-hidden="true"></div>
+						{:else}
+							<p class="nav-group-label">{group.label}</p>
 						{/if}
-					</a>
-
-					{#if item.children?.length && !collapsed}
-						<div class="nav-children" aria-label="Submenu {item.label}">
-							{#each item.children as child (child.href)}
-								{@const ChildIcon = child.icon}
-								{@const childActive =
-									currentPath === child.href || currentPath.startsWith(child.href + '/')}
-								<a
-									class="nav-sub"
-									class:is-active={childActive}
-									href={child.href}
-									onclick={closeMobile}
-									aria-current={childActive ? 'page' : undefined}
-								>
-									<ChildIcon size={14} />
-									<span>{child.label}</span>
-								</a>
-							{/each}
-						</div>
 					{/if}
+
+					{#each group.items as item (item.href)}
+						{@const active = isLinkActive(item, currentPath)}
+						{@const Icon = item.icon}
+						<a
+							class="nav-item"
+							class:is-active={active}
+							href={item.href}
+							onclick={closeMobile}
+							title={collapsed ? item.label : undefined}
+							aria-current={active ? 'page' : undefined}
+						>
+							<span class="nav-icon"><Icon size={16} /></span>
+							{#if !collapsed}
+								<span class="nav-label">{item.label}</span>
+							{/if}
+						</a>
+					{/each}
 				</div>
 			{/each}
 		</nav>
@@ -237,15 +208,17 @@
 					<Menu size={18} />
 				</button>
 
-				<nav class="breadcrumbs" aria-label="Breadcrumb">
-					{#each breadcrumbs as crumb, i (crumb.href)}
+				<nav class="dash-crumbs" aria-label="Breadcrumb">
+					{#each breadcrumbs as crumb, i (crumb.label)}
 						{#if i > 0}
 							<ChevronRight size={14} class="crumb-sep" aria-hidden="true" />
 						{/if}
 						{#if i === breadcrumbs.length - 1}
 							<span class="crumb-current">{crumb.label}</span>
-						{:else}
+						{:else if crumb.href}
 							<a class="crumb-link" href={crumb.href}>{crumb.label}</a>
+						{:else}
+							<span class="crumb-group">{crumb.label}</span>
 						{/if}
 					{/each}
 				</nav>
@@ -264,13 +237,13 @@
 
 <style>
 	.dash-shell {
-		--side-w: 248px;
+		--side-w: 244px;
 		display: flex;
 		min-height: 100dvh;
 	}
 
 	.dash-shell.is-collapsed {
-		--side-w: 72px;
+		--side-w: 70px;
 	}
 
 	.mobile-backdrop {
@@ -337,16 +310,6 @@
 		filter: none;
 	}
 
-	.side-badge {
-		padding: 2px 7px;
-		border: 1px solid var(--d-border-strong);
-		border-radius: 999px;
-		font-size: 0.6rem;
-		font-weight: 800;
-		letter-spacing: 0.1em;
-		color: var(--d-muted);
-	}
-
 	.side-toggle {
 		width: 36px;
 		height: 36px;
@@ -379,29 +342,50 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 14px 10px;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.nav-section {
+		padding: 12px 10px;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+	}
+
+	.nav-group {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.nav-group.has-top-gap {
+		margin-top: 12px;
+	}
+
+	.nav-group-label {
+		margin: 0 0 4px;
+		padding: 0 11px;
+		font-size: 0.66rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--d-muted);
+		opacity: 0.78;
+	}
+
+	.nav-sep {
+		height: 1px;
+		margin: 2px 10px 8px;
+		background: var(--d-border);
 	}
 
 	.nav-item {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		min-height: 40px;
-		padding: 0 12px;
-		border-radius: 11px;
+		min-height: 36px;
+		padding: 0 11px;
+		border-radius: 9px;
 		color: var(--d-muted);
 		text-decoration: none;
-		font-size: 0.83rem;
-		font-weight: 700;
+		font-size: 0.81rem;
+		font-weight: 600;
 		transition:
 			background-color 140ms ease,
 			color 140ms ease;
@@ -426,41 +410,6 @@
 	.nav-item.is-active {
 		background: var(--d-ink);
 		color: var(--d-bg);
-	}
-
-	.nav-children {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		margin: 2px 0 6px 18px;
-		padding-left: 10px;
-		border-left: 1px solid var(--d-border);
-	}
-
-	.nav-sub {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		min-height: 34px;
-		padding: 0 10px;
-		border-radius: 9px;
-		color: var(--d-muted);
-		text-decoration: none;
-		font-size: 0.78rem;
-		font-weight: 600;
-		transition:
-			background-color 140ms ease,
-			color 140ms ease;
-	}
-
-	.nav-sub:hover {
-		background: var(--d-surface-2);
-		color: var(--d-ink);
-	}
-
-	.nav-sub.is-active {
-		background: var(--d-surface-2);
-		color: var(--d-ink);
 		font-weight: 700;
 	}
 
@@ -475,14 +424,14 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		min-height: 40px;
+		min-height: 38px;
 		padding: 0 12px;
 		border: 1px solid var(--d-border-strong);
-		border-radius: 11px;
+		border-radius: 10px;
 		background: transparent;
 		color: var(--d-ink);
 		text-decoration: none;
-		font-size: 0.8rem;
+		font-size: 0.78rem;
 		font-weight: 700;
 		transition:
 			background-color 140ms ease,
@@ -540,13 +489,12 @@
 		cursor: pointer;
 	}
 
-	.breadcrumbs {
+	.dash-crumbs {
 		display: flex;
 		align-items: center;
 		gap: 6px;
 		font-size: 0.82rem;
 		min-width: 0;
-		overflow: hidden;
 	}
 
 	.crumb-link {
@@ -560,12 +508,16 @@
 		color: var(--d-ink);
 	}
 
+	.crumb-group {
+		color: var(--d-muted);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
 	.crumb-current {
 		color: var(--d-ink);
 		font-weight: 800;
 		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
 	.dash-content {
@@ -580,7 +532,7 @@
 	@media (max-width: 960px) {
 		.dash-shell,
 		.dash-shell.is-collapsed {
-			--side-w: 264px;
+			--side-w: 260px;
 		}
 
 		.dash-sidebar {

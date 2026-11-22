@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { session } from '#lib/stores/session';
 	import { loadGallerySession, buildAnimatedGif } from '#lib/services/gallery';
 	import { playGrekSound } from '#lib/utils/audio';
 	import { getProductForCount } from '#lib/utils/canvas';
+	import StudioFrame from '#lib/components/ui/StudioFrame.svelte';
+	import ThemeToggle from '#lib/components/ui/ThemeToggle.svelte';
 	import type { GallerySession } from '#lib/types';
 
 	export let sessionId: string = '';
+
+	$: theme = $session.theme;
 
 	let galleryData: GallerySession | null = null;
 	let loading = true;
@@ -339,351 +344,431 @@
 	}
 </script>
 
-<section class="gallery-screen">
-	{#if loading}
-		<div class="gallery-loader">
-			<div class="loader-spinner"></div>
-			<p>Memuat koleksi foto kamu…</p>
-		</div>
-	{:else if error}
-		<div class="gallery-error">
-			<div class="error-icon">
-				<svg
-					width="48"
-					height="48"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="10" />
-					<line x1="12" y1="8" x2="12" y2="12" />
-					<line x1="12" y1="16" x2="12.01" y2="16" />
-				</svg>
-			</div>
-			<h2>Oops!</h2>
-			<p>{error}</p>
-			<p class="error-hint">Scan kembali QR code di photobooth untuk membuka tautan terbaru.</p>
-		</div>
-	{:else if galleryData}
-		<!-- Top Header Bar -->
-		<header class="gallery-header">
-			<div class="gallery-brand-row">
-				<span class="brand-dot" aria-hidden="true"></span>
-				<span class="brand-name">DISTUDIO</span>
-				<span class="brand-dot" aria-hidden="true"></span>
-				<time class="gallery-date" datetime={galleryData.createdAt}
-					>{formatDate(galleryData.createdAt)}</time
-				>
-			</div>
+<section
+	class="gallery-screen kiosk-scope"
+	class:theme-light={theme === 'light'}
+	aria-label="Galeri foto DISTUDIO"
+>
+	<StudioFrame />
 
-			<div class="header-actions">
-				<!-- Quick Download All Button -->
-				<button
-					class="dl-all-pill-btn"
-					on:click={downloadAll}
-					disabled={downloadingAll}
-					aria-label="Download all items at once"
-				>
-					{#if downloadingAll}
-						<div class="btn-spinner" aria-hidden="true"></div>
-						<span>Mengunduh…</span>
-					{:else}
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
+	<div class="frame-inner">
+		{#if loading}
+			<header class="gallery-header">
+				<div class="gallery-brand-row">
+					<img
+						class="brand-logo"
+						src="/landingPage/logo.svg"
+						alt="DI'STUDIO"
+						width="217"
+						height="81"
+						draggable="false"
+					/>
+				</div>
+				<div class="header-actions">
+					<ThemeToggle inline />
+				</div>
+			</header>
+			<div class="header-divider" aria-hidden="true"></div>
+			<div class="gallery-loader">
+				<div class="loader-spinner"></div>
+				<p>Memuat koleksi foto kamu…</p>
+			</div>
+		{:else if error}
+			<header class="gallery-header">
+				<div class="gallery-brand-row">
+					<img
+						class="brand-logo"
+						src="/landingPage/logo.svg"
+						alt="DI'STUDIO"
+						width="217"
+						height="81"
+						draggable="false"
+					/>
+				</div>
+				<div class="header-actions">
+					<ThemeToggle inline />
+				</div>
+			</header>
+			<div class="header-divider" aria-hidden="true"></div>
+			<div class="gallery-error">
+				<div class="error-icon">
+					<svg
+						width="44"
+						height="44"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<line x1="12" y1="8" x2="12" y2="12" />
+						<line x1="12" y1="16" x2="12.01" y2="16" />
+					</svg>
+				</div>
+				<h2>Sesi Tidak Ditemukan</h2>
+				<p>{error}</p>
+				<p class="error-hint">Scan kembali QR code di photobooth untuk membuka tautan terbaru.</p>
+			</div>
+		{:else if galleryData}
+			<!-- Top Header Bar -->
+			<header class="gallery-header">
+				<div class="gallery-brand-row">
+					<img
+						class="brand-logo"
+						src="/landingPage/logo.svg"
+						alt="DI'STUDIO"
+						width="217"
+						height="81"
+						draggable="false"
+					/>
+					<span class="brand-sep" aria-hidden="true"></span>
+					<div class="brand-meta">
+						<span class="brand-tag">GALERI SESI</span>
+						<time class="gallery-date" datetime={galleryData.createdAt}
+							>{formatDate(galleryData.createdAt)}</time
 						>
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="7 10 12 15 17 10" />
-							<line x1="12" y1="15" x2="12" y2="3" />
-						</svg>
-						<span>Unduh Semua ({cardItems.length} File)</span>
-					{/if}
-				</button>
-			</div>
-		</header>
+					</div>
+				</div>
 
-		<!-- Main Deck Experience -->
-		<main class="deck-main">
-			<!-- Side Navigation Arrow Left (Mid-Screen) -->
-			<button class="side-nav-btn prev" on:click={prevCard} aria-label="Kartu sebelumnya">
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<polyline points="15 18 9 12 15 6" />
-				</svg>
-			</button>
-
-			<!-- Side Navigation Arrow Right (Mid-Screen) -->
-			<button class="side-nav-btn next" on:click={nextCard} aria-label="Kartu berikutnya">
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<polyline points="9 18 15 12 9 6" />
-				</svg>
-			</button>
-
-			<!-- Card Stage Container -->
-			<div class="deck-wrapper">
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="deck-stage"
-					on:pointerdown={handlePointerDown}
-					on:pointermove={handlePointerMove}
-					on:pointerup={handlePointerUp}
-					on:pointercancel={handlePointerUp}
-				>
-					{#each cardItems as card, index (card.id)}
-						{@const diff = getCircularDiff(index, activeCardIndex, cardItems.length)}
-						{@const isVisible = Math.abs(diff) <= 2}
-						{#if isVisible}
-							<!-- svelte-ignore a11y_click_events_have_key_events -->
-							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-							<article
-								class="deck-card"
-								class:active={diff === 0}
-								class:prev={diff === -1}
-								class:next={diff === 1}
-								class:far-prev={diff <= -2}
-								class:far-next={diff >= 2}
-								style="--diff: {diff}; --drag-offset: {diff === 0 && isDragging
-									? pointerDeltaX
-									: 0}px;"
-								on:click={() => {
-									if (diff !== 0) goToCard(index);
-								}}
+				<div class="header-actions">
+					<!-- Quick Download All Button -->
+					<button
+						type="button"
+						class="dl-all-pill-btn"
+						on:click={downloadAll}
+						disabled={downloadingAll}
+						aria-label="Unduh semua file sekaligus"
+					>
+						{#if downloadingAll}
+							<div class="btn-spinner" aria-hidden="true"></div>
+							<span>Mengunduh…</span>
+						{:else}
+							<svg
+								width="15"
+								height="15"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.4"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
 							>
-								<!-- Card Header Top Pill -->
-								<div class="card-top-bar">
-									<span class="card-badge">
-										{#if card.type === 'strip'}
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-											>
-												<rect x="5" y="2" width="14" height="20" rx="2" />
-												<line x1="5" y1="8" x2="19" y2="8" />
-												<line x1="5" y1="14" x2="19" y2="14" />
-											</svg>
-										{:else if card.type === 'photo'}
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-											>
-												<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-												<circle cx="8.5" cy="8.5" r="1.5" />
-												<polyline points="21 15 16 10 5 21" />
-											</svg>
-										{:else if card.type === 'gif' || card.type === 'video'}
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-											>
-												<circle cx="12" cy="12" r="10" />
-												<polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
-											</svg>
-										{/if}
-										<span>{card.badge}</span>
-									</span>
-									<span class="card-count-pill">{index + 1} / {cardItems.length}</span>
-								</div>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="7 10 12 15 17 10" />
+								<line x1="12" y1="15" x2="12" y2="3" />
+							</svg>
+							<span class="dl-all-text">Unduh Semua ({cardItems.length})</span>
+						{/if}
+					</button>
 
-								<!-- Card Visual Media Area -->
-								<div class="card-media-wrap">
-									{#if card.type === 'strip'}
-										<!-- svelte-ignore a11y_img_redundant_alt -->
-										<img
-											src={card.imageUrl}
-											alt="Photo strip 4R sheet"
-											class="card-img strip-img-fit"
-										/>
-									{:else if card.type === 'photo'}
-										<img src={card.imageUrl} alt={card.title} class="card-img photo-img-fit" />
-									{:else if card.type === 'gif'}
-										<!-- Live Interactive Looper Slideshow Inside the Card -->
-										<div class="looper-embed">
-											{#if galleryData.photos && galleryData.photos.length > 0}
-												<img
-													src={galleryData.photos[currentLoopFrame]}
-													alt="Loop frame {currentLoopFrame + 1}"
-													class="card-img looper-img-fit"
-												/>
-												<div class="looper-badge">
-													Frame {currentLoopFrame + 1} / {galleryData.photos.length}
-												</div>
-											{/if}
-										</div>
-									{:else if card.type === 'video' && card.imageUrl}
-										<!-- svelte-ignore a11y_media_has_caption -->
-										{#if videoError}
-											<img
-												src={galleryData.gifDataUrl || galleryData.photos?.[0] || ''}
-												alt="Animasi looping dari GIF"
-												class="card-img photo-img-fit"
-											/>
-										{:else}
-											<video
-												src={card.imageUrl}
-												class="card-img photo-img-fit"
-												autoplay
-												loop
-												muted
-												playsinline
-												controls
-												on:error={() => (videoError = true)}
-											></video>
-										{/if}
-									{/if}
-								</div>
+					<ThemeToggle inline />
+				</div>
+			</header>
 
-								<!-- Clean Lightweight Bottom Card Container -->
-								<div class="card-bottom-bar">
-									<div class="card-info-text">
-										<h3 class="card-title">{card.title}</h3>
-										<p class="card-sub">{card.subtitle}</p>
-									</div>
+			<div class="header-divider" aria-hidden="true"></div>
 
-									<!-- Mini Looper Controls if GIF card -->
-									{#if card.type === 'gif'}
-										<div class="looper-compact-controls">
-											<button
-												class="looper-play-pill"
-												on:click|stopPropagation={togglePlayPause}
-												aria-label={isLoopPlaying ? 'Pause' : 'Play'}
-											>
-												{#if isLoopPlaying}
-													<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-														<rect x="6" y="4" width="4" height="16" rx="1" />
-														<rect x="14" y="4" width="4" height="16" rx="1" />
-													</svg>
-													<span>Pause</span>
-												{:else}
-													<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-														<polygon points="5 3 19 12 5 21 5 3" />
-													</svg>
-													<span>Play</span>
-												{/if}
-											</button>
+			<!-- Main Deck Experience -->
+			<main class="deck-main">
+				<!-- Side Navigation Arrow Left (Mid-Screen) -->
+				<button class="side-nav-btn prev" on:click={prevCard} aria-label="Kartu sebelumnya">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="15 18 9 12 15 6" />
+					</svg>
+				</button>
 
-											<div class="looper-speed-pills">
-												<button
-													class="speed-pill"
-													class:active={loopIntervalMs === 800}
-													on:click|stopPropagation={() => setLoopSpeed(800)}>0.8s</button
-												>
-												<button
-													class="speed-pill"
-													class:active={loopIntervalMs === 1000}
-													on:click|stopPropagation={() => setLoopSpeed(1000)}>1.0s</button
-												>
-												<button
-													class="speed-pill"
-													class:active={loopIntervalMs === 1500}
-													on:click|stopPropagation={() => setLoopSpeed(1500)}>1.5s</button
-												>
-											</div>
-										</div>
-									{/if}
+				<!-- Side Navigation Arrow Right (Mid-Screen) -->
+				<button class="side-nav-btn next" on:click={nextCard} aria-label="Kartu berikutnya">
+					<svg
+						width="22"
+						height="22"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<polyline points="9 18 15 12 9 6" />
+					</svg>
+				</button>
 
-									<!-- Clean Action Button -->
-									<div class="card-action-row">
-										{#if card.type === 'gif' && gifGenerating}
-											<button class="card-action-btn disabled" disabled>
-												<div class="btn-spinner" aria-hidden="true"></div>
-												<span>Memproses GIF…</span>
-											</button>
-										{:else}
-											<button
-												class="card-action-btn"
-												on:click|stopPropagation={card.downloadAction}
-												aria-label={card.btnLabel}
-											>
+				<!-- Card Stage Container -->
+				<div class="deck-wrapper">
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="deck-stage"
+						on:pointerdown={handlePointerDown}
+						on:pointermove={handlePointerMove}
+						on:pointerup={handlePointerUp}
+						on:pointercancel={handlePointerUp}
+					>
+						{#each cardItems as card, index (card.id)}
+							{@const diff = getCircularDiff(index, activeCardIndex, cardItems.length)}
+							{@const isVisible = Math.abs(diff) <= 2}
+							{#if isVisible}
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+								<article
+									class="deck-card"
+									class:active={diff === 0}
+									class:prev={diff === -1}
+									class:next={diff === 1}
+									class:far-prev={diff <= -2}
+									class:far-next={diff >= 2}
+									style="--diff: {diff}; --drag-offset: {diff === 0 && isDragging
+										? pointerDeltaX
+										: 0}px;"
+									on:click={() => {
+										if (diff !== 0) goToCard(index);
+									}}
+								>
+									<!-- Card Header Top Pill -->
+									<div class="card-top-bar">
+										<span class="card-badge">
+											{#if card.type === 'strip'}
 												<svg
-													width="16"
-													height="16"
+													width="12"
+													height="12"
 													viewBox="0 0 24 24"
 													fill="none"
 													stroke="currentColor"
 													stroke-width="2.5"
 													stroke-linecap="round"
 													stroke-linejoin="round"
-													class="dl-icon"
+													aria-hidden="true"
 												>
-													<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-													<polyline points="7 10 12 15 17 10" />
-													<line x1="12" y1="15" x2="12" y2="3" />
+													<rect x="5" y="2" width="14" height="20" rx="2" />
+													<line x1="5" y1="8" x2="19" y2="8" />
+													<line x1="5" y1="14" x2="19" y2="14" />
 												</svg>
-												<span>{card.btnLabel}</span>
-											</button>
+											{:else if card.type === 'photo'}
+												<svg
+													width="12"
+													height="12"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+													<circle cx="8.5" cy="8.5" r="1.5" />
+													<polyline points="21 15 16 10 5 21" />
+												</svg>
+											{:else if card.type === 'gif' || card.type === 'video'}
+												<svg
+													width="12"
+													height="12"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+												>
+													<circle cx="12" cy="12" r="10" />
+													<polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+												</svg>
+											{/if}
+											<span>{card.badge}</span>
+										</span>
+										<span class="card-count-pill">{index + 1} / {cardItems.length}</span>
+									</div>
+
+									<!-- Card Visual Media Area -->
+									<div class="card-media-wrap">
+										{#if card.type === 'strip'}
+											<!-- svelte-ignore a11y_img_redundant_alt -->
+											<img
+												src={card.imageUrl}
+												alt="Photo strip 4R sheet"
+												class="card-img strip-img-fit"
+											/>
+										{:else if card.type === 'photo'}
+											<img src={card.imageUrl} alt={card.title} class="card-img photo-img-fit" />
+										{:else if card.type === 'gif'}
+											<!-- Live Interactive Looper Slideshow Inside the Card -->
+											<div class="looper-embed">
+												{#if galleryData.photos && galleryData.photos.length > 0}
+													<img
+														src={galleryData.photos[currentLoopFrame]}
+														alt="Loop frame {currentLoopFrame + 1}"
+														class="card-img looper-img-fit"
+													/>
+													<div class="looper-badge">
+														Frame {currentLoopFrame + 1} / {galleryData.photos.length}
+													</div>
+												{/if}
+											</div>
+										{:else if card.type === 'video' && card.imageUrl}
+											<!-- svelte-ignore a11y_media_has_caption -->
+											{#if videoError}
+												<img
+													src={galleryData.gifDataUrl || galleryData.photos?.[0] || ''}
+													alt="Animasi looping dari GIF"
+													class="card-img photo-img-fit"
+												/>
+											{:else}
+												<video
+													src={card.imageUrl}
+													class="card-img photo-img-fit"
+													autoplay
+													loop
+													muted
+													playsinline
+													controls
+													on:error={() => (videoError = true)}
+												></video>
+											{/if}
 										{/if}
 									</div>
-								</div>
-							</article>
-						{/if}
-					{/each}
-				</div>
-			</div>
 
-			<!-- Clean Minimal Footer (No dots) -->
-			<footer class="deck-footer">
-				<p class="swipe-hint">
-					<span>Geser layar atau tekan tombol kiri/kanan di tepi</span>
-				</p>
-			</footer>
-		</main>
-	{/if}
+									<!-- Clean Lightweight Bottom Card Container -->
+									<div class="card-bottom-bar">
+										<div class="card-info-text">
+											<h3 class="card-title">{card.title}</h3>
+											<p class="card-sub">{card.subtitle}</p>
+										</div>
+
+										<!-- Mini Looper Controls if GIF card -->
+										{#if card.type === 'gif'}
+											<div class="looper-compact-controls">
+												<button
+													class="looper-play-pill"
+													on:click|stopPropagation={togglePlayPause}
+													aria-label={isLoopPlaying ? 'Pause' : 'Play'}
+												>
+													{#if isLoopPlaying}
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+															<rect x="6" y="4" width="4" height="16" rx="1" />
+															<rect x="14" y="4" width="4" height="16" rx="1" />
+														</svg>
+														<span>Pause</span>
+													{:else}
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+															<polygon points="5 3 19 12 5 21 5 3" />
+														</svg>
+														<span>Play</span>
+													{/if}
+												</button>
+
+												<div class="looper-speed-pills">
+													<button
+														class="speed-pill"
+														class:active={loopIntervalMs === 800}
+														on:click|stopPropagation={() => setLoopSpeed(800)}>0.8s</button
+													>
+													<button
+														class="speed-pill"
+														class:active={loopIntervalMs === 1000}
+														on:click|stopPropagation={() => setLoopSpeed(1000)}>1.0s</button
+													>
+													<button
+														class="speed-pill"
+														class:active={loopIntervalMs === 1500}
+														on:click|stopPropagation={() => setLoopSpeed(1500)}>1.5s</button
+													>
+												</div>
+											</div>
+										{/if}
+
+										<!-- Clean Action Button -->
+										<div class="card-action-row">
+											{#if card.type === 'gif' && gifGenerating}
+												<button class="card-action-btn disabled" disabled>
+													<div class="btn-spinner" aria-hidden="true"></div>
+													<span>Memproses GIF…</span>
+												</button>
+											{:else}
+												<button
+													class="card-action-btn"
+													on:click|stopPropagation={card.downloadAction}
+													aria-label={card.btnLabel}
+												>
+													<svg
+														width="16"
+														height="16"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2.5"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														class="dl-icon"
+													>
+														<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+														<polyline points="7 10 12 15 17 10" />
+														<line x1="12" y1="15" x2="12" y2="3" />
+													</svg>
+													<span>{card.btnLabel}</span>
+												</button>
+											{/if}
+										</div>
+									</div>
+								</article>
+							{/if}
+						{/each}
+					</div>
+				</div>
+
+				<!-- Clean Minimal Footer (No dots) -->
+				<footer class="deck-footer">
+					<p class="swipe-hint">
+						<span>Geser layar atau tekan tombol kiri/kanan di tepi</span>
+					</p>
+				</footer>
+			</main>
+		{/if}
+	</div>
 </section>
 
 <style>
 	.gallery-screen {
+		--page-bg: #0b0a09;
+		--divider-bg: rgba(251, 247, 240, 0.08);
+		--card-bg: #141210;
+		--card-surface: #1b1815;
+		--card-border: rgba(251, 247, 240, 0.14);
+		--card-border-strong: rgba(251, 247, 240, 0.3);
+		--media-bg: #100e0c;
+		--strip-bg: #191613;
+		--pill-bg: rgba(18, 16, 15, 0.88);
+		--title-ink: #fbf7f0;
+		--muted-ink: #a8a29e;
+		--cta-bg: #fbf7f0;
+		--cta-ink: #0b0a09;
+		--cta-bg-hover: #efe8dc;
+		--btn-bg: rgba(251, 247, 240, 0.05);
+		--btn-border: rgba(251, 247, 240, 0.22);
+		--card-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+		--nav-shadow: 0 8px 22px rgba(0, 0, 0, 0.42);
+		--stage-dot: rgba(251, 247, 240, 0.055);
+		--spinner-track: rgba(251, 247, 240, 0.18);
+		--btn-spinner-track: rgba(11, 10, 9, 0.25);
+
 		min-height: 100dvh;
 		min-height: 100vh;
-		background: var(--color-bg, #fbf7f0);
-		color: var(--color-ink, #1c1917);
+		width: 100%;
+		background-color: var(--page-bg);
+		background-image: radial-gradient(var(--stage-dot) 1.1px, transparent 1.1px);
+		background-size: 20px 20px;
+		color: var(--title-ink);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -691,57 +776,128 @@
 		user-select: none;
 		-webkit-user-select: none;
 		overflow-x: hidden;
+		transition:
+			background-color 220ms ease,
+			color 220ms ease;
+	}
+
+	.gallery-screen.theme-light {
+		--page-bg: #ffffff;
+		--divider-bg: #f1f3f5;
+		--card-bg: #ffffff;
+		--card-surface: #f8fafc;
+		--card-border: #e5e7eb;
+		--card-border-strong: #cbd5e1;
+		--media-bg: #f1f5f9;
+		--strip-bg: #f4f1ec;
+		--pill-bg: rgba(255, 255, 255, 0.92);
+		--title-ink: #0f172a;
+		--muted-ink: #64748b;
+		--cta-bg: #0f172a;
+		--cta-ink: #ffffff;
+		--cta-bg-hover: #1e293b;
+		--btn-bg: #ffffff;
+		--btn-border: #cbd5e1;
+		--card-shadow: 0 14px 32px rgba(15, 23, 42, 0.1);
+		--nav-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+		--stage-dot: rgba(15, 23, 42, 0.055);
+		--spinner-track: rgba(15, 23, 42, 0.14);
+		--btn-spinner-track: rgba(255, 255, 255, 0.35);
+	}
+
+	/* ── Area isi di dalam StudioFrame ── */
+	.frame-inner {
+		position: relative;
+		z-index: 1;
+		flex: 1;
+		width: 100%;
+		max-width: 1160px;
+		margin: 0 auto;
+		padding: clamp(22px, 3dvh, 36px) clamp(24px, 4vw, 56px) clamp(20px, 2.8dvh, 30px);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: clamp(10px, 1.4dvh, 14px);
 	}
 
 	/* ── Header ── */
 	.gallery-header {
 		width: 100%;
-		max-width: 960px;
-		min-height: 56px;
-		padding: 12px 20px;
+		min-height: 48px;
+		padding: 4px 0;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 16px;
+		gap: 14px;
 		z-index: 50;
-		background: var(--color-surface, #fefcf8);
-		border-bottom: 1.5px solid var(--color-border, #e5ddd5);
+		flex-shrink: 0;
 	}
 
 	.gallery-brand-row {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 12px;
 		min-width: 0;
 	}
 
-	.brand-name {
-		font-family: var(--font-display, serif);
-		font-size: 1.25rem;
-		font-weight: 800;
-		letter-spacing: 0.08em;
-		color: var(--color-ink, #1c1917);
+	.brand-logo {
+		width: clamp(86px, 10.5vw, 128px);
+		height: auto;
+		flex-shrink: 0;
+		filter: invert(1);
+		transition: filter 220ms ease;
 	}
 
-	.brand-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: #d97706;
+	.theme-light .brand-logo {
+		filter: none;
+	}
+
+	.brand-sep {
+		width: 1px;
+		height: 24px;
+		background: var(--card-border-strong);
 		flex-shrink: 0;
+	}
+
+	.brand-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+
+	.brand-tag {
+		font-family: var(--font-body);
+		font-size: 0.64rem;
+		font-weight: 800;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--title-ink);
+		line-height: 1.2;
 	}
 
 	.gallery-date {
 		font-size: 0.72rem;
-		color: var(--color-ink-light, #78716c);
+		color: var(--muted-ink);
 		margin: 0;
 		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.header-actions {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: 8px;
+		flex-shrink: 0;
+	}
+
+	.header-divider {
+		width: 100%;
+		height: 4px;
+		border-radius: 999px;
+		background: var(--divider-bg);
+		flex-shrink: 0;
 	}
 
 	.dl-all-pill-btn {
@@ -749,28 +905,36 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		min-height: 44px;
-		background: var(--color-ink, #1c1917);
-		color: white;
-		border: none;
+		min-height: 40px;
+		background: var(--cta-bg);
+		color: var(--cta-ink);
+		border: 1px solid transparent;
 		border-radius: var(--radius-full, 9999px);
-		padding: 10px 18px;
-		font-size: 0.82rem;
+		padding: 0 18px;
+		font-family: var(--font-body);
+		font-size: 0.78rem;
 		font-weight: 700;
+		letter-spacing: 0.01em;
 		cursor: pointer;
-		box-shadow: var(--shadow-sm);
-		transition: all 0.2s ease;
+		box-shadow: var(--nav-shadow);
+		transition:
+			background-color 180ms ease,
+			transform 180ms ease,
+			opacity 180ms ease;
 		white-space: nowrap;
 	}
 
 	.dl-all-pill-btn:hover:not(:disabled) {
-		background: #292524;
+		background: var(--cta-bg-hover);
 		transform: translateY(-1px);
-		box-shadow: var(--shadow-md);
+	}
+
+	.dl-all-pill-btn:active:not(:disabled) {
+		transform: scale(0.98);
 	}
 
 	.dl-all-pill-btn:disabled {
-		opacity: 0.65;
+		opacity: 0.55;
 		cursor: not-allowed;
 	}
 
@@ -783,7 +947,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 20px 16px 24px;
+		padding: 10px 8px 12px;
 		position: relative;
 	}
 
@@ -792,34 +956,40 @@
 		position: fixed;
 		top: 50%;
 		transform: translateY(-50%);
-		width: 48px;
-		height: 48px;
+		width: 46px;
+		height: 46px;
 		border-radius: 50%;
-		background: var(--color-surface, #fefcf8);
-		border: 1.5px solid var(--color-border, #e5ddd5);
-		color: var(--color-ink, #1c1917);
+		background: var(--pill-bg);
+		border: 1px solid var(--btn-border);
+		color: var(--title-ink);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
 		z-index: 60;
-		box-shadow: var(--shadow-md, 0 4px 12px rgba(28, 25, 23, 0.1));
-		transition: all 0.2s ease;
+		box-shadow: var(--nav-shadow);
+		transition:
+			background-color 180ms ease,
+			border-color 180ms ease,
+			color 180ms ease,
+			transform 180ms ease;
 	}
 
 	.side-nav-btn.prev {
-		left: 20px;
+		left: 24px;
 	}
 
 	.side-nav-btn.next {
-		right: 20px;
+		right: 24px;
 	}
 
 	.side-nav-btn:hover:not(:disabled) {
-		border-color: var(--color-ink, #1c1917);
-		color: var(--color-accent, #2563eb);
-		transform: translateY(-50%) scale(1.08);
-		box-shadow: var(--shadow-lg);
+		background: var(--cta-bg);
+		border-color: var(--cta-bg);
+		color: var(--cta-ink);
+		transform: translateY(-50%) scale(1.06);
 	}
 
 	.side-nav-btn:disabled {
@@ -860,16 +1030,18 @@
 		width: 100%;
 		height: 100%;
 		max-width: 420px;
-		border-radius: var(--radius-xl, 28px);
-		background: var(--color-surface, #fefcf8);
-		border: 1.5px solid var(--color-border, #e5ddd5);
-		box-shadow: var(--shadow-lg, 0 12px 32px rgba(28, 25, 23, 0.12));
+		border-radius: var(--radius-xl, 26px);
+		background: var(--card-bg);
+		border: 1px solid var(--card-border);
+		box-shadow: var(--card-shadow);
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
 		transition:
 			transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-			opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+			opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+			background-color 220ms ease,
+			border-color 220ms ease;
 		will-change: transform, opacity;
 	}
 
@@ -884,7 +1056,7 @@
 	/* Previous peek */
 	.deck-card.prev {
 		transform: translate3d(calc(-72% + var(--drag-offset, 0px)), 0, 0) scale(0.88);
-		opacity: 0.35;
+		opacity: 0.32;
 		z-index: 10;
 		cursor: pointer;
 	}
@@ -892,7 +1064,7 @@
 	/* Next peek */
 	.deck-card.next {
 		transform: translate3d(calc(72% + var(--drag-offset, 0px)), 0, 0) scale(0.88);
-		opacity: 0.35;
+		opacity: 0.32;
 		z-index: 10;
 		cursor: pointer;
 	}
@@ -925,30 +1097,35 @@
 	}
 
 	.card-badge {
-		background: rgba(254, 252, 248, 0.94);
-		border: 1px solid var(--color-border, #e5ddd5);
-		color: var(--color-ink, #1c1917);
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
+		background: var(--pill-bg);
+		border: 1px solid var(--card-border);
+		color: var(--title-ink);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
 		padding: 5px 12px;
 		border-radius: var(--radius-full, 9999px);
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		box-shadow: 0 2px 6px rgba(28, 25, 23, 0.06);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
 	}
 
 	.card-count-pill {
-		background: rgba(254, 252, 248, 0.94);
-		border: 1px solid var(--color-border, #e5ddd5);
-		color: var(--color-ink-light, #78716c);
-		font-size: 0.72rem;
-		font-family: var(--font-mono, monospace);
+		background: var(--pill-bg);
+		border: 1px solid var(--card-border);
+		color: var(--muted-ink);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		font-size: 0.7rem;
+		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
 		font-weight: 700;
 		padding: 5px 10px;
 		border-radius: var(--radius-full, 9999px);
-		box-shadow: 0 2px 6px rgba(28, 25, 23, 0.06);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
 	}
 
 	/* ── Card Media Area ── */
@@ -956,7 +1133,7 @@
 		flex: 1;
 		width: 100%;
 		position: relative;
-		background: #f5efeb;
+		background: var(--media-bg);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -974,7 +1151,7 @@
 	.strip-img-fit {
 		object-fit: contain;
 		padding: 14px;
-		background: #ede6de;
+		background: var(--strip-bg);
 	}
 
 	.photo-img-fit {
@@ -988,7 +1165,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: #1c1917;
+		background: #0b0a09;
 	}
 
 	.looper-img-fit {
@@ -999,19 +1176,22 @@
 		position: absolute;
 		bottom: 12px;
 		right: 14px;
-		background: rgba(28, 25, 23, 0.85);
-		color: white;
-		font-size: 0.72rem;
+		background: rgba(11, 10, 9, 0.82);
+		color: #fbf7f0;
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		font-size: 0.7rem;
+		font-variant-numeric: tabular-nums;
 		font-weight: 700;
 		padding: 4px 10px;
 		border-radius: var(--radius-full, 9999px);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border: 1px solid rgba(251, 247, 240, 0.18);
 	}
 
 	/* ── Clean Lightweight Bottom Container ── */
 	.card-bottom-bar {
-		background: var(--color-surface, #fefcf8);
-		border-top: 1.5px solid var(--color-border, #e5ddd5);
+		background: var(--card-bg);
+		border-top: 1px solid var(--card-border);
 		padding: 16px 18px 18px;
 		display: flex;
 		flex-direction: column;
@@ -1026,15 +1206,16 @@
 	}
 
 	.card-title {
-		font-size: 1.05rem;
+		font-size: 1rem;
 		font-weight: 800;
+		letter-spacing: -0.01em;
 		margin: 0;
-		color: var(--color-ink, #1c1917);
+		color: var(--title-ink);
 	}
 
 	.card-sub {
-		font-size: 0.76rem;
-		color: var(--color-ink-light, #78716c);
+		font-size: 0.75rem;
+		color: var(--muted-ink);
 		margin: 0;
 	}
 
@@ -1044,29 +1225,31 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px;
-		padding: 6px 10px;
-		background: var(--color-bg, #fbf7f0);
-		border: 1px solid var(--color-border, #e5ddd5);
-		border-radius: var(--radius-md, 12px);
+		padding: 6px 8px;
+		background: var(--card-surface);
+		border: 1px solid var(--card-border);
+		border-radius: 10px;
 	}
 
 	.looper-play-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		background: var(--color-surface, #fefcf8);
-		border: 1.5px solid var(--color-border, #e5ddd5);
-		color: var(--color-ink, #1c1917);
+		background: var(--card-bg);
+		border: 1px solid var(--card-border);
+		color: var(--title-ink);
 		padding: 4px 10px;
-		border-radius: 6px;
-		font-size: 0.74rem;
+		border-radius: 7px;
+		font-size: 0.72rem;
 		font-weight: 700;
 		cursor: pointer;
-		transition: all 0.18s ease;
+		transition:
+			border-color 150ms ease,
+			background-color 150ms ease;
 	}
 
 	.looper-play-pill:hover {
-		border-color: var(--color-ink, #1c1917);
+		border-color: var(--title-ink);
 	}
 
 	.looper-speed-pills {
@@ -1077,23 +1260,32 @@
 
 	.speed-pill {
 		background: transparent;
-		border: 1px solid var(--color-border, #e5ddd5);
-		color: var(--color-ink-light, #78716c);
+		border: 1px solid var(--card-border);
+		color: var(--muted-ink);
 		padding: 3px 8px;
-		border-radius: 6px;
-		font-size: 0.7rem;
-		font-weight: 600;
+		border-radius: 7px;
+		font-size: 0.69rem;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition:
+			background-color 150ms ease,
+			border-color 150ms ease,
+			color 150ms ease;
+	}
+
+	.speed-pill:hover:not(.active) {
+		color: var(--title-ink);
+		border-color: var(--card-border-strong);
 	}
 
 	.speed-pill.active {
-		background: var(--color-ink, #1c1917);
-		color: white;
-		border-color: var(--color-ink, #1c1917);
+		background: var(--cta-bg);
+		color: var(--cta-ink);
+		border-color: var(--cta-bg);
 	}
 
-	/* Clean Action Button */
+	/* Clean Action Button — Studio Monochrome */
 	.card-action-row {
 		width: 100%;
 	}
@@ -1104,36 +1296,39 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		padding: 12px 18px;
-		border-radius: var(--radius-md, 12px);
-		background: var(--color-accent, #2563eb);
-		border: none;
-		color: white;
-		font-size: 0.9rem;
-		font-weight: 700;
+		min-height: 44px;
+		padding: 11px 18px;
+		border-radius: 12px;
+		background: var(--cta-bg);
+		border: 1px solid transparent;
+		color: var(--cta-ink);
+		font-family: var(--font-body);
+		font-size: 0.86rem;
+		font-weight: 800;
+		letter-spacing: 0.01em;
 		cursor: pointer;
-		box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
-		transition: all 0.2s ease;
+		transition:
+			background-color 180ms ease,
+			transform 150ms ease,
+			opacity 180ms ease;
 	}
 
 	.card-action-btn:hover:not(:disabled) {
-		background: var(--color-accent-hover, #1d4ed8);
-		box-shadow: 0 6px 16px rgba(37, 99, 235, 0.38);
+		background: var(--cta-bg-hover);
 		transform: translateY(-1px);
 	}
 
 	.card-action-btn:active:not(:disabled) {
-		transform: translateY(1px);
-		box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+		transform: scale(0.985);
 	}
 
 	.card-action-btn.disabled,
 	.card-action-btn:disabled {
-		opacity: 0.65;
+		opacity: 0.55;
 		cursor: not-allowed;
-		background: var(--color-border, #e5ddd5);
-		color: var(--color-ink-light, #78716c);
-		box-shadow: none;
+		background: var(--card-surface);
+		border-color: var(--card-border);
+		color: var(--muted-ink);
 	}
 
 	.dl-icon {
@@ -1146,17 +1341,19 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 6px;
-		margin-top: 14px;
+		margin-top: 12px;
 		z-index: 20;
 	}
 
 	.swipe-hint {
-		font-size: 0.74rem;
-		color: var(--color-ink-light, #78716c);
+		font-size: 0.72rem;
+		letter-spacing: 0.02em;
+		color: var(--muted-ink);
 		margin: 0;
 		display: flex;
 		align-items: center;
 		gap: 6px;
+		text-align: center;
 	}
 
 	/* ── Loader & Error States ── */
@@ -1167,24 +1364,25 @@
 		align-items: center;
 		justify-content: center;
 		gap: 16px;
-		color: var(--color-ink-light, #78716c);
-		font-size: 0.95rem;
+		color: var(--muted-ink);
+		font-size: 0.88rem;
+		font-weight: 600;
 	}
 
 	.loader-spinner {
-		width: 40px;
-		height: 40px;
-		border: 3px solid var(--color-border, #e5ddd5);
-		border-top-color: var(--color-accent, #2563eb);
+		width: 36px;
+		height: 36px;
+		border: 2.5px solid var(--spinner-track);
+		border-top-color: var(--title-ink);
 		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
+		animation: spin 0.75s linear infinite;
 	}
 
 	.btn-spinner {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(255, 255, 255, 0.4);
-		border-top-color: white;
+		border: 2px solid var(--btn-spinner-track);
+		border-top-color: currentColor;
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
 	}
@@ -1201,52 +1399,74 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 14px;
+		gap: 12px;
 		text-align: center;
-		padding: 40px 24px;
+		padding: 40px 20px;
 	}
 
 	.error-icon {
-		color: var(--color-coral, #f87171);
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		width: 68px;
+		height: 68px;
+		border-radius: 50%;
+		background: var(--card-bg);
+		border: 1px solid var(--card-border);
+		color: var(--title-ink);
+		display: grid;
+		place-items: center;
 	}
 
 	.gallery-error h2 {
-		font-size: 1.6rem;
-		font-weight: 800;
-		color: var(--color-ink, #1c1917);
-		margin: 0;
+		font-family: var(--font-display);
+		font-size: 1.5rem;
+		font-weight: 700;
+		color: var(--title-ink);
+		margin: 4px 0 0;
 	}
 
 	.gallery-error p {
-		color: var(--color-ink-light, #78716c);
+		color: var(--muted-ink);
 		max-width: 320px;
-		line-height: 1.5;
+		line-height: 1.55;
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 0.86rem;
 	}
 
 	.error-hint {
-		font-size: 0.8rem;
-		opacity: 0.7;
+		font-size: 0.78rem;
+		opacity: 0.78;
 	}
 
 	/* ── Mobile Optimization ── */
-	@media (max-width: 600px) {
-		.gallery-header {
-			padding: 12px 14px;
+	@media (max-width: 680px) {
+		.frame-inner {
+			padding: 18px 18px 20px;
+			gap: 10px;
 		}
 
-		.brand-name {
-			font-size: 1.05rem;
+		.gallery-header {
+			gap: 8px;
+		}
+
+		.brand-logo {
+			width: 80px;
+		}
+
+		.brand-sep {
+			height: 20px;
+		}
+
+		.brand-tag {
+			font-size: 0.58rem;
+		}
+
+		.gallery-date {
+			font-size: 0.66rem;
 		}
 
 		.dl-all-pill-btn {
-			min-height: 44px;
-			padding: 10px 14px;
-			font-size: 0.75rem;
+			min-height: 38px;
+			padding: 0 12px;
+			font-size: 0.72rem;
 		}
 
 		.side-nav-btn {
@@ -1255,11 +1475,11 @@
 		}
 
 		.side-nav-btn.prev {
-			left: 8px;
+			left: 10px;
 		}
 
 		.side-nav-btn.next {
-			right: 8px;
+			right: 10px;
 		}
 
 		.deck-stage {
@@ -1281,7 +1501,7 @@
 		}
 
 		.card-title {
-			font-size: 0.98rem;
+			font-size: 0.96rem;
 		}
 
 		.card-sub {
@@ -1290,7 +1510,14 @@
 
 		.card-action-btn {
 			padding: 11px 16px;
-			font-size: 0.85rem;
+			font-size: 0.84rem;
+		}
+	}
+
+	@media (max-width: 460px) {
+		.brand-sep,
+		.brand-meta {
+			display: none;
 		}
 	}
 </style>
